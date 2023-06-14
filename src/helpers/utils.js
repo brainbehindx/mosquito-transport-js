@@ -1,12 +1,11 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { ServerReachableListener, StoreReadyListener } from "./listeners";
+import { ServerReachableListener } from "./listeners";
 import { CACHE_STORAGE_PATH } from "./values";
 import { CacheStore, Scoped } from "./variables";
 
 export const updateCacheStore = () => {
     clearTimeout(Scoped.cacheStorageReducer);
     Scoped.cacheStorageReducer = setTimeout(() => {
-        AsyncStorage.setItem(CACHE_STORAGE_PATH, JSON.stringify({
+        localStorage.setItem(CACHE_STORAGE_PATH, JSON.stringify({
             DatabaseStore: CacheStore.DatabaseStore,
             DatabaseRecords: CacheStore.DatabaseRecords,
             AuthStore: CacheStore.AuthStore,
@@ -16,34 +15,17 @@ export const updateCacheStore = () => {
 }
 
 export const releaseCacheStore = () => {
-    AsyncStorage.getItem(CACHE_STORAGE_PATH, (_, res) => {
-        const j = JSON.parse(res || '{}');
+    const j = JSON.parse(localStorage.getItem(CACHE_STORAGE_PATH) || '{}');
 
-        console.log('mosquitoCache: ', JSON.stringify(j));
-        Object.keys(j).forEach(e => {
-            CacheStore[e] = j[e];
-        });
-        Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
-            Scoped.AuthJWTToken[key] = value?.token;
-        });
-        Scoped.IsStoreReady = true;
-        StoreReadyListener.triggerListener('ready');
-        // TODO: commit pending write
+    console.log('mosquitoCache: ', JSON.stringify(j));
+    Object.keys(j).forEach(e => {
+        CacheStore[e] = j[e];
     });
+    Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
+        Scoped.AuthJWTToken[key] = value?.token;
+    });
+    // TODO: commit pending write
 }
-
-export const awaitStore = () => new Promise(resolve => {
-    if (Scoped.IsStoreReady) {
-        resolve();
-        return;
-    }
-    const l = StoreReadyListener.startListener(t => {
-        if (t === 'ready') {
-            resolve();
-            l();
-        }
-    }, true);
-});
 
 export const awaitReachableServer = (projectUrl) => new Promise(resolve => {
     if (Scoped.IS_CONNECTED[projectUrl]) {

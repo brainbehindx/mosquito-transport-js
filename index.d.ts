@@ -21,10 +21,10 @@ export function INCREMENT(count?: number): { $increment: number };
 
 interface FetchHttpInit extends RequestInit {
     retries?: number;
-    enableAuth: boolean;
+    disableAuth?: boolean;
 }
 
-export default class RNMosquitoDb {
+export default class MosquitoDbClient {
     constructor(config: MosquitoDbConfig);
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
     collection(path: string): MosquitoDbCollection;

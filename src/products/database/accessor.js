@@ -1,12 +1,10 @@
 import _ from "lodash";
-import { IS_RAW_OBJECT, IS_WHOLE_NUMBER, queryEntries } from "../../helpers/peripherals";
-import { awaitStore, updateCacheStore } from "../../helpers/utils";
-import { CacheStore, Scoped } from "../../helpers/variables";
-import { IS_TIMESTAMP } from "./types";
+import { IS_RAW_OBJECT, queryEntries } from "../../helpers/peripherals";
+import { updateCacheStore } from "../../helpers/utils";
+import { CacheStore } from "../../helpers/variables";
 import { confirmFilterDoc } from "./validator";
 
 export const insertRecord = async (projectUrl, dbUrl, dbName, collection, accessId, query, value) => {
-    await awaitStore();
     if (!CacheStore.DatabaseRecords[projectUrl])
         CacheStore.DatabaseRecords[projectUrl] = {};
 
@@ -24,14 +22,12 @@ export const insertRecord = async (projectUrl, dbUrl, dbName, collection, access
 }
 
 export const deleteRecord = async (projectUrl, dbUrl, dbName, accessId) => {
-    await awaitStore();
     if (CacheStore.DatabaseRecords[projectUrl]?.[dbUrl]?.[dbName]?.[accessId])
         delete CacheStore.DatabaseRecords[projectUrl][dbUrl][dbName][accessId];
     updateCacheStore();
 }
 
 export const getRecord = async (projectUrl, dbUrl, dbName, path, accessId) => {
-    await awaitStore();
     return CacheStore.DatabaseRecords[projectUrl]?.[dbUrl]?.[dbName]?.[path]?.[accessId];
 }
 
@@ -46,7 +42,6 @@ export const transformCollectionPath = (path = '') => `${path.split('/').join('.
 
 // TODO: fix segment hint(returnOnly, excludeField)
 export const updateDatabaseStore = async (projectUrl, dbUrl, dbName, path, dataMap, segment) => {
-    await awaitStore();
     prepareDatabaseStore(projectUrl, dbUrl, dbName);
 
     const node = transformCollectionPath(path),
@@ -84,7 +79,6 @@ export const prepareDatabaseStore = (projectUrl, dbUrl, dbName) => {
 }
 
 export const accessData = async (projectUrl, dbUrl, dbName, path = '', find, segment) => {
-    await awaitStore();
     prepareDatabaseStore(projectUrl, dbUrl, dbName);
 
     const d = _.get(CacheStore.DatabaseStore[projectUrl][db], transformCollectionPath(path)) || [],
@@ -94,8 +88,6 @@ export const accessData = async (projectUrl, dbUrl, dbName, path = '', find, seg
 }
 
 export const addPendingWrites = async (projectUrl, dbUrl, dbName, writeId, value) => {
-    await awaitStore();
-
     if (!CacheStore.PendingWrites[projectUrl])
         CacheStore.PendingWrites[projectUrl] = {};
 
@@ -109,7 +101,6 @@ export const addPendingWrites = async (projectUrl, dbUrl, dbName, writeId, value
 }
 
 export const removePendingWrite = async (projectUrl, dbUrl, dbName, writeId) => {
-    await awaitStore();
     if (CacheStore.PendingWrites[projectUrl]?.[`${dbUrl}${dbName}`]?.[`${writeId}`])
         delete CacheStore.PendingWrites[projectUrl][`${dbUrl}${dbName}`][`${writeId}`];
     updateCacheStore();

@@ -4,19 +4,15 @@ import { Scoped } from "./src/helpers/variables";
 import { MosquitoDbAuth } from "./src/products/auth";
 import { MosquitoDbCollection } from "./src/products/database";
 import { MosquitoDbStorage } from "./src/products/storage";
-import { encode, decode } from 'base-64';
 import { InitializedProject, ServerReachableListener } from "./src/helpers/listeners";
 import { initTokenRefresher, triggerAuth, triggerAuthToken } from "./src/products/auth/accessor";
 import { FIELD_DELETION, INCREMENT, TIMESTAMP } from "./src/products/database/types";
 import { mfetch } from "./src/products/http_callable";
 import { io } from "socket.io-client";
 
-globalThis.btoa = encode;
-globalThis.atob = decode;
-
 releaseCacheStore();
 
-class RNMosquitoDb {
+class MosquitoDbClient {
     constructor(config) {
         validateMosquitoDbConfig(config);
         this.config = {
@@ -116,4 +112,4 @@ export {
     TIMESTAMP
 }
 
-export default RNMosquitoDb;
+export default MosquitoDbClient;

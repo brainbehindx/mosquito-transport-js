@@ -1,7 +1,7 @@
 import { io } from "socket.io-client";
 import EngineApi from "../../helpers/EngineApi";
 import { AuthListener, AuthTokenListener, TokenRefreshListener } from "../../helpers/listeners";
-import { awaitReachableServer, awaitStore, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
+import { awaitReachableServer, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
 import { CacheConstant, CacheStore, Scoped } from "../../helpers/variables";
 import { awaitRefreshToken, initTokenRefresher, injectFreshToken, listenToken, triggerAuth, triggerAuthToken } from "./accessor";
 
@@ -118,7 +118,6 @@ const doCustomSignin = (builder, email, password) => new Promise(async (resolve,
     const { projectUrl, accessKey } = builder;
 
     try {
-        await awaitStore();
         const r = await (await fetch(EngineApi._customSignin(projectUrl), buildFetchInterface({
             _: `${btoa(email)}</>${btoa(password)}`
         }, accessKey))).json();
@@ -134,7 +133,6 @@ const doCustomSignup = (builder, email, password, name, metadata) => new Promise
     const { projectUrl, accessKey } = builder;
 
     try {
-        await awaitStore();
         const r = await (await fetch(EngineApi._customSignup(projectUrl), buildFetchInterface({
             _: `${btoa(email)}</>${btoa(password)}</>${(btoa(name || '').trim())}`,
             metadata
@@ -148,7 +146,6 @@ const doCustomSignup = (builder, email, password, name, metadata) => new Promise
 });
 
 export const doSignOut = async (builder) => {
-    await awaitStore();
     const { projectUrl, accessKey } = builder,
         lastestToken = Scoped.AuthJWTToken[projectUrl];
 
@@ -179,7 +176,6 @@ const doGoogleSignin = (builder, token) => new Promise(async (resolve, reject) =
     const { projectUrl, accessKey } = builder;
 
     try {
-        await awaitStore();
         const r = await (await fetch(EngineApi._googleSignin(projectUrl), buildFetchInterface({
             _: token
         }, accessKey))).json();

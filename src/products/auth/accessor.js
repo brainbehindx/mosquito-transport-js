@@ -2,7 +2,7 @@ import { doSignOut } from ".";
 import EngineApi from "../../helpers/EngineApi";
 import { AuthListener, AuthTokenListener, TokenRefreshListener } from "../../helpers/listeners";
 import { listenReachableServer } from "../../helpers/peripherals";
-import { awaitReachableServer, awaitStore, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
+import { awaitReachableServer, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
 
 export const listenToken = (callback, projectUrl) =>
@@ -12,7 +12,6 @@ export const listenToken = (callback, projectUrl) =>
     }, true);
 
 export const injectFreshToken = async (projectUrl, obj) => {
-    await awaitStore();
     CacheStore.AuthStore[projectUrl] = { ...obj };
     Scoped.AuthJWTToken[projectUrl] = obj.token;
     updateCacheStore();
@@ -22,13 +21,11 @@ export const injectFreshToken = async (projectUrl, obj) => {
 }
 
 export const triggerAuth = async (projectUrl) => {
-    await awaitStore();
     const l = CacheStore.AuthStore[projectUrl]?.tokenData;
     AuthListener.triggerKeyListener(projectUrl, l ? { ...l } : null);
 }
 
 export const triggerAuthToken = async (projectUrl) => {
-    await awaitStore();
     AuthTokenListener.triggerKeyListener(projectUrl, CacheStore.AuthStore[projectUrl]?.token || null);
 }
 
@@ -43,7 +40,6 @@ export const awaitRefreshToken = (projectUrl) => new Promise(resolve => {
 
 export const initTokenRefresher = async (config, forceRefresh) => {
     const { projectUrl, accessKey, maxRetries } = config;
-    await awaitStore();
     const l = CacheStore.AuthStore[projectUrl]?.tokenData;
     clearTimeout(Scoped.TokenRefreshTimer[projectUrl]);
 

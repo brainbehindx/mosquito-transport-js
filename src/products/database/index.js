@@ -3,7 +3,7 @@ import { io } from "socket.io-client";
 import EngineApi from "../../helpers/EngineApi";
 import { DatabaseRecordsListener } from "../../helpers/listeners";
 import { IS_WHOLE_NUMBER, listenReachableServer } from "../../helpers/peripherals";
-import { awaitStore, buildFetchInterface, simplifyError } from "../../helpers/utils";
+import { buildFetchInterface, simplifyError } from "../../helpers/utils";
 import { Scoped } from "../../helpers/variables";
 import { accessData, addPendingWrites, commitStore, generateRecordID, getRecord, insertRecord, removePendingWrite, updateDatabaseStore } from "./accessor";
 import { validateFilter, validateReadConfig, validateWriteValue } from "./validator";
@@ -101,7 +101,6 @@ const listenDocument = (callback, onError, builder, config) => {
 
         (async function () {
             try {
-                await awaitStore();
                 const a = await (await fetch(EngineApi._areYouOk(projectUrl))).json();
                 if (a.status !== 'yes') throw 'am_sick';
             } catch (e) {

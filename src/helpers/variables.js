@@ -3,7 +3,6 @@ export const Scoped = {
     IS_CONNECTED: {},
     AuthJWTToken: {},
     cacheStorageReducer: undefined,
-    IsStoreReady: false,
     TokenRefreshTimer: {},
     LastTokenRefreshRef: {},
     StorageProcessID: 0
