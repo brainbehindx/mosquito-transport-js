@@ -6,6 +6,7 @@ interface MosquitoDbConfig {
     disableCache?: boolean;
     accessKey: string;
     maxRetries?: number;
+    awaitStorage?: boolean;
 }
 
 interface GetDatabase {
