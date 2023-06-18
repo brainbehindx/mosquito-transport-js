@@ -1,26 +1,8 @@
 import EngineApi from "../../helpers/EngineApi";
 import { prefixStoragePath } from "../../helpers/peripherals";
 import { Scoped } from "../../helpers/variables";
-import { encode as btoa } from 'base-64';
-import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { awaitReachableServer, buildFetchInterface, simplifyError } from "../../helpers/utils";
 import { awaitRefreshToken } from "../auth/accessor";
-
-const LINKING_ERROR =
-    `The package 'react-native-mosquitodb' doesn't seem to be linked. Make sure: \n\n` +
-    Platform.select({ ios: "- You have run 'pod install'\n", default: '' }) +
-    '- You rebuilt the app after installing the package\n' +
-    '- You are not using Expo Go\n';
-
-const MosquitodbModule = NativeModules.Mosquitodb || (
-    new Proxy({}, {
-        get() {
-            throw new Error(LINKING_ERROR);
-        },
-    })
-),
-    emitter = Platform.OS === 'android' ?
-        DeviceEventEmitter : new NativeEventEmitter(MosquitodbModule);
 
 export class MosquitoDbStorage {
     constructor(config) {

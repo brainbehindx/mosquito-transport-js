@@ -3,9 +3,10 @@ import { CACHE_STORAGE_PATH } from "./values";
 import { CacheStore, Scoped } from "./variables";
 
 export const updateCacheStore = () => {
+    try { window } catch (e) { return; }
     clearTimeout(Scoped.cacheStorageReducer);
     Scoped.cacheStorageReducer = setTimeout(() => {
-        localStorage.setItem(CACHE_STORAGE_PATH, JSON.stringify({
+        window.localStorage.setItem(CACHE_STORAGE_PATH, JSON.stringify({
             DatabaseStore: CacheStore.DatabaseStore,
             DatabaseRecords: CacheStore.DatabaseRecords,
             AuthStore: CacheStore.AuthStore,
@@ -15,7 +16,8 @@ export const updateCacheStore = () => {
 }
 
 export const releaseCacheStore = () => {
-    const j = JSON.parse(localStorage.getItem(CACHE_STORAGE_PATH) || '{}');
+    try { window } catch (e) { return; }
+    const j = JSON.parse(window.localStorage.getItem(CACHE_STORAGE_PATH) || '{}');
 
     console.log('mosquitoCache: ', JSON.stringify(j));
     Object.keys(j).forEach(e => {
