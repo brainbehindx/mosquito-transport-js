@@ -30,7 +30,9 @@ class MosquitoDbClient {
             triggerAuthToken(projectUrl);
             initTokenRefresher({ ...this.config }, true);
 
-            const socket = io(`ws://${projectUrl.split('://')[1]}`);
+            const socket = io(`ws://${projectUrl.split('://')[1]}`, {
+                transports: ['websocket', 'polling', 'flashsocket']
+            });
 
             socket.on('connect', () => {
                 ServerReachableListener.triggerKeyListener(projectUrl, true);

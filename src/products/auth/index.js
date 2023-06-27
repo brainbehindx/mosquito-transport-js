@@ -47,7 +47,10 @@ export class MosquitoDbAuth {
             }
             if (processID !== lastInitRef) return;
 
-            socket = io(`ws://${projectUrl.split('://')[1]}`, { extraHeaders: { mtoken: Scoped.AuthJWTToken[projectUrl] } });
+            socket = io(`ws://${projectUrl.split('://')[1]}`, {
+                extraHeaders: { mtoken: Scoped.AuthJWTToken[projectUrl] },
+                transports: ['websocket', 'polling', 'flashsocket']
+            });
 
             socket.emit("_listenUserVerification");
 

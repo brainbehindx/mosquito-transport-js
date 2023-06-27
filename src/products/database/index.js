@@ -121,7 +121,8 @@ const listenDocument = (callback, onError, builder, config) => {
                 dbName,
                 dbUrl,
                 accessKey
-            }
+            },
+            transports: ['websocket', 'polling', 'flashsocket']
         });
 
         socket.emit(findOne ? '_listenDocument' : '_listenCollection');
@@ -221,7 +222,8 @@ const initOnDisconnectionTask = (builder, value, type) => {
                 dbName,
                 dbUrl,
                 accessKey
-            }
+            },
+            transports: ['websocket', 'polling', 'flashsocket']
         })
 
         socket.emit('_startDisconnectWriteTask');

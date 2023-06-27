@@ -90,7 +90,9 @@ var MosquitoDbClient = /*#__PURE__*/_createClass(function MosquitoDbClient(confi
     (0, _accessor.triggerAuth)(projectUrl);
     (0, _accessor.triggerAuthToken)(projectUrl);
     (0, _accessor.initTokenRefresher)(_objectSpread({}, this.config), true);
-    var socket = (0, _socket.io)("ws://".concat(projectUrl.split('://')[1]));
+    var socket = (0, _socket.io)("ws://".concat(projectUrl.split('://')[1]), {
+      transports: ['websocket', 'polling', 'flashsocket']
+    });
     socket.on('connect', function () {
       _listeners.ServerReachableListener.triggerKeyListener(projectUrl, true);
     });

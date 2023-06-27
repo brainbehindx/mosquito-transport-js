@@ -1,6 +1,6 @@
 {
   "name": "mosquitodb-js",
-  "version": "0.0.3",
+  "version": "0.0.5",
   "description": "Javascript web sdk for mosquitodb",
   "main": "dist/index.js",
   "scripts": {
@@ -40,6 +40,6 @@
     "@babel/runtime": "^7.21.5"
   },
   "engines": {
-    "node": ">= 16.0.0"
+    "node": ">=14"
   }
 }
