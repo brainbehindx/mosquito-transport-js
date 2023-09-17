@@ -28,16 +28,19 @@ var listenToken = function listenToken(callback, projectUrl) {
 };
 exports.listenToken = listenToken;
 var injectFreshToken = /*#__PURE__*/function () {
-  var _ref = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee(projectUrl, obj) {
+  var _ref = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee(config, obj) {
+    var projectUrl;
     return _regeneratorRuntime().wrap(function _callee$(_context) {
       while (1) switch (_context.prev = _context.next) {
         case 0:
+          projectUrl = config.projectUrl;
           _variables.CacheStore.AuthStore[projectUrl] = _objectSpread({}, obj);
           _variables.Scoped.AuthJWTToken[projectUrl] = obj.token;
           (0, _utils.updateCacheStore)();
           triggerAuth(projectUrl);
           triggerAuthToken(projectUrl);
-        case 5:
+          initTokenRefresher(config);
+        case 7:
         case "end":
           return _context.stop();
       }
@@ -147,112 +150,100 @@ var initTokenRefresher = /*#__PURE__*/function () {
   };
 }();
 exports.initTokenRefresher = initTokenRefresher;
-var refreshToken = /*#__PURE__*/function () {
-  var _ref5 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(projectUrl, accessKey, processRef) {
-    var remainRetries,
-      initialRetries,
-      lostProcess,
-      token,
-      r,
-      _e$simpleError,
-      _args5 = arguments;
-    return _regeneratorRuntime().wrap(function _callee5$(_context5) {
-      while (1) switch (_context5.prev = _context5.next) {
-        case 0:
-          remainRetries = _args5.length > 3 && _args5[3] !== undefined ? _args5[3] : 7;
-          initialRetries = _args5.length > 4 && _args5[4] !== undefined ? _args5[4] : 7;
-          lostProcess = (0, _utils.simplifyError)('process_lost', 'The token refresh process has been lost and replace with another one');
-          _context5.prev = 3;
-          token = _variables.Scoped.AuthJWTToken[projectUrl];
-          _context5.next = 7;
-          return fetch(_EngineApi["default"]._refreshAuthToken(projectUrl), (0, _utils.buildFetchInterface)({
-            _: _variables.Scoped.AuthJWTToken[projectUrl]
-          }, accessKey));
-        case 7:
-          _context5.next = 9;
-          return _context5.sent.json();
-        case 9:
-          r = _context5.sent;
-          if (!(processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl])) {
-            _context5.next = 12;
+var refreshToken = function refreshToken(projectUrl, accessKey, processRef) {
+  var remainRetries = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 7;
+  var initialRetries = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : 7;
+  return new Promise( /*#__PURE__*/function () {
+    var _ref5 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(resolve, reject) {
+      var lostProcess, token, r, _e$simpleError, l;
+      return _regeneratorRuntime().wrap(function _callee5$(_context5) {
+        while (1) switch (_context5.prev = _context5.next) {
+          case 0:
+            lostProcess = (0, _utils.simplifyError)('process_lost', 'The token refresh process has been lost and replace with another one');
+            _context5.prev = 1;
+            token = _variables.Scoped.AuthJWTToken[projectUrl];
+            _context5.next = 5;
+            return fetch(_EngineApi["default"]._refreshAuthToken(projectUrl), (0, _utils.buildFetchInterface)({
+              _: _variables.Scoped.AuthJWTToken[projectUrl]
+            }, accessKey));
+          case 5:
+            _context5.next = 7;
+            return _context5.sent.json();
+          case 7:
+            r = _context5.sent;
+            if (!(processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl])) {
+              _context5.next = 10;
+              break;
+            }
+            throw lostProcess;
+          case 10:
+            if (!r.simpleError) {
+              _context5.next = 12;
+              break;
+            }
+            throw r;
+          case 12:
+            if (!_variables.CacheStore.AuthStore[projectUrl]) {
+              _context5.next = 22;
+              break;
+            }
+            _variables.CacheStore.AuthStore[projectUrl] = _objectSpread({}, r.result);
+            _variables.Scoped.AuthJWTToken[projectUrl] = r.result.token;
+            invalidateToken(projectUrl, accessKey, token);
+            resolve(r.result.token);
+            triggerAuthToken(projectUrl);
+            (0, _utils.updateCacheStore)();
+            initTokenRefresher({
+              projectUrl: projectUrl,
+              accessKey: accessKey,
+              maxRetries: initialRetries
+            });
+            _context5.next = 23;
             break;
-          }
-          throw lostProcess;
-        case 12:
-          if (!r.simpleError) {
-            _context5.next = 14;
+          case 22:
+            throw lostProcess;
+          case 23:
+            _context5.next = 28;
             break;
-          }
-          throw r;
-        case 14:
-          if (!_variables.CacheStore.AuthStore[projectUrl]) {
-            _context5.next = 24;
-            break;
-          }
-          _variables.CacheStore.AuthStore[projectUrl] = _objectSpread({}, r.result);
-          _variables.Scoped.AuthJWTToken[projectUrl] = r.result.token;
-          triggerAuthToken(projectUrl);
-          (0, _utils.updateCacheStore)();
-          invalidateToken(projectUrl, accessKey, token);
-          initTokenRefresher({
-            projectUrl: projectUrl,
-            accessKey: accessKey,
-            maxRetries: initialRetries
-          });
-          return _context5.abrupt("return", r.result.token);
-        case 24:
-          throw lostProcess;
-        case 25:
-          _context5.next = 41;
-          break;
-        case 27:
-          _context5.prev = 27;
-          _context5.t0 = _context5["catch"](3);
-          if (!_context5.t0.simpleError) {
-            _context5.next = 35;
-            break;
-          }
-          console.error("refreshToken error: ".concat((_e$simpleError = _context5.t0.simpleError) === null || _e$simpleError === void 0 ? void 0 : _e$simpleError.message));
-          (0, _.doSignOut)({
-            projectUrl: projectUrl,
-            accessKey: accessKey
-          });
-          throw _context5.t0.simpleError;
-        case 35:
-          if (!(remainRetries <= 0)) {
-            _context5.next = 40;
-            break;
-          }
-          console.error("refreshToken retry exceeded, waiting for 2min before starting another retry");
-          return _context5.abrupt("return", new Promise(function (resolve, reject) {
-            setTimeout(function () {
-              if (processRef === _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
-                refreshToken(projectUrl, accessKey, processRef, initialRetries, initialRetries).then(resolve, reject);
-              } else reject(lostProcess.simpleError);
-            }, 120000);
-          }));
-        case 40:
-          return _context5.abrupt("return", new Promise(function (resolve, reject) {
-            var l = (0, _peripherals.listenReachableServer)(function (c) {
-              if (c) {
-                l();
-                refreshToken(projectUrl, accessKey, processRef, remainRetries - 1, initialRetries).then(resolve, reject);
-              } else if (processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
-                reject(lostProcess.simpleError);
-                l();
-              }
-            }, projectUrl);
-          }));
-        case 41:
-        case "end":
-          return _context5.stop();
-      }
-    }, _callee5, null, [[3, 27]]);
-  }));
-  return function refreshToken(_x7, _x8, _x9) {
-    return _ref5.apply(this, arguments);
-  };
-}();
+          case 25:
+            _context5.prev = 25;
+            _context5.t0 = _context5["catch"](1);
+            if (_context5.t0.simpleError) {
+              console.error("refreshToken error: ".concat((_e$simpleError = _context5.t0.simpleError) === null || _e$simpleError === void 0 ? void 0 : _e$simpleError.message));
+              (0, _.doSignOut)({
+                projectUrl: projectUrl,
+                accessKey: accessKey
+              });
+              reject(_context5.t0.simpleError);
+            } else if (remainRetries <= 0) {
+              console.error("refreshToken retry exceeded, waiting for 2min before starting another retry");
+              setTimeout(function () {
+                if (processRef === _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
+                  refreshToken(projectUrl, accessKey, processRef, initialRetries, initialRetries).then(resolve, reject);
+                } else reject(lostProcess.simpleError);
+              }, 120000);
+            } else {
+              l = (0, _peripherals.listenReachableServer)(function (c) {
+                if (c) {
+                  l();
+                  refreshToken(projectUrl, accessKey, processRef, remainRetries - 1, initialRetries).then(resolve, reject);
+                } else if (processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
+                  reject(lostProcess.simpleError);
+                  l();
+                }
+              }, projectUrl);
+            }
+          case 28:
+          case "end":
+            return _context5.stop();
+        }
+      }, _callee5, null, [[1, 25]]);
+    }));
+    return function (_x7, _x8) {
+      return _ref5.apply(this, arguments);
+    };
+  }());
+};
 exports.refreshToken = refreshToken;
 var invalidateToken = /*#__PURE__*/function () {
   var _ref6 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(projectUrl, accessKey, token) {
@@ -295,7 +286,7 @@ var invalidateToken = /*#__PURE__*/function () {
       }
     }, _callee6, null, [[0, 12]]);
   }));
-  return function invalidateToken(_x10, _x11, _x12) {
+  return function invalidateToken(_x9, _x10, _x11) {
     return _ref6.apply(this, arguments);
   };
 }();

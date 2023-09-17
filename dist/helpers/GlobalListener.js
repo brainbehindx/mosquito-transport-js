@@ -98,3 +98,4 @@ var GlobalListener = /*#__PURE__*/function () {
   return GlobalListener;
 }();
 exports["default"] = GlobalListener;
+module.exports = exports.default;

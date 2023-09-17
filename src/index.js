@@ -115,7 +115,6 @@ const validateMosquitoDbConfig = (config) => {
 export {
     FIELD_DELETION,
     INCREMENT,
-    TIMESTAMP
-}
-
-export default MosquitoDbClient;
+    TIMESTAMP,
+    MosquitoDbClient
+};

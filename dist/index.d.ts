@@ -1,3 +1,5 @@
+import { Buffer } from "buffer";
+
 interface MosquitoDbConfig {
     dbName?: string;
     dbUrl?: string;
@@ -25,7 +27,7 @@ interface FetchHttpInit extends RequestInit {
     disableAuth?: boolean;
 }
 
-export default class MosquitoDbClient {
+export class MosquitoDbClient {
     constructor(config: MosquitoDbConfig);
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
     collection(path: string): MosquitoDbCollection;
@@ -40,7 +42,6 @@ interface MosquitoDbCollection {
         get: (config?: GetConfig) => Promise<DocumentResult[]>;
         listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
         count: () => Promise<number>;
-        random: (config?: GetConfig) => Promise<DocumentResult[]>;
         limit: (limit: number) => ({
             random: (config?: GetConfig) => Promise<DocumentResult[]>;
             get: (config?: GetConfig) => Promise<DocumentResult[]>;
@@ -59,7 +60,6 @@ interface MosquitoDbCollection {
             })
         })
     });
-    random: (config?: GetConfig) => Promise<DocumentResult[]>;
     sort: (sort: Sort | string, direction?: SortDirection) => ({
         get: (config?: GetConfig) => Promise<DocumentResult[]>;
         listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
@@ -129,10 +129,34 @@ interface DocumentError extends ErrorResponse {
 interface GetConfig {
     excludeFields?: string | string[];
     returnOnly?: string | string[];
+    extraction?: GetConfigExtraction | GetConfigExtraction[];
+}
+
+interface GetConfigExtraction {
+    limit?: number;
+    sort: string;
+    direction?: 'desc' | 'asc' | 1 | -1
+    collection: string;
+    find?: DocumentFind;
+    findOne?: DocumentFind
 }
 
 interface DocumentFind {
+    $and?: any[];
+    $nor?: any[];
+    $or?: any[];
+    $text?: {
+        $search: string;
+        $language?: string;
+        $caseSensitive?: boolean;
+        $diacriticSensitive?: boolean;
+    };
+    // $where?: string | ((this: TSchema) => boolean);
+    $comment?: string | Document;
+}
 
+declare interface Document {
+    [key: string]: any;
 }
 
 interface DocumentWriteResult { }
@@ -183,9 +207,15 @@ interface AuthData {
     }
 }
 
+declare type Base64String = string;
+
+interface ReqOptions {
+    awaitServer?: boolean;
+}
+
 interface MosquitoDbStorage {
     downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void) => () => void;
-    uploadFile: (file: string, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void) => () => void;
+    uploadFile: (file: Base64String | Blob | Buffer, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;
     deleteFolder: (folder: string) => Promise<void>;
 }

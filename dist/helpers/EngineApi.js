@@ -80,3 +80,4 @@ var apis = {
 };
 var _default = _objectSpread({}, apis);
 exports["default"] = _default;
+module.exports = exports.default;

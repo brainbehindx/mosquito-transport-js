@@ -1,3 +1,5 @@
+import { Buffer } from "buffer";
+
 interface MosquitoDbConfig {
     dbName?: string;
     dbUrl?: string;
@@ -25,7 +27,7 @@ interface FetchHttpInit extends RequestInit {
     disableAuth?: boolean;
 }
 
-export default class MosquitoDbClient {
+export class MosquitoDbClient {
     constructor(config: MosquitoDbConfig);
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
     collection(path: string): MosquitoDbCollection;
@@ -205,9 +207,15 @@ interface AuthData {
     }
 }
 
+declare type Base64String = string;
+
+interface ReqOptions {
+    awaitServer?: boolean;
+}
+
 interface MosquitoDbStorage {
     downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void) => () => void;
-    uploadFile: (file: string, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void) => () => void;
+    uploadFile: (file: Base64String | Blob | Buffer, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;
     deleteFolder: (folder: string) => Promise<void>;
 }

@@ -15,13 +15,13 @@ Object.defineProperty(exports, "INCREMENT", {
     return _types.INCREMENT;
   }
 });
+exports.MosquitoDbClient = void 0;
 Object.defineProperty(exports, "TIMESTAMP", {
   enumerable: true,
   get: function get() {
     return _types.TIMESTAMP;
   }
 });
-exports["default"] = void 0;
 var _peripherals = require("./helpers/peripherals");
 var _utils = require("./helpers/utils");
 var _variables = require("./helpers/variables");
@@ -104,6 +104,7 @@ var MosquitoDbClient = /*#__PURE__*/_createClass(function MosquitoDbClient(confi
     }, projectUrl);
   }
 });
+exports.MosquitoDbClient = MosquitoDbClient;
 var validator = {
   dbName: function dbName(v) {
     if (typeof v !== 'string' || !v.trim()) throw "Invalid value supplied to dbName, value must be string and greater than one";
@@ -141,5 +142,3 @@ var validateMosquitoDbConfig = function validateMosquitoDbConfig(config) {
   if (!config['projectUrl']) throw 'projectUrl is a required property in MosquitoDb() constructor';
   if (!config['accessKey']) throw 'accessKey is a required property in MosquitoDb() constructor';
 };
-var _default = MosquitoDbClient;
-exports["default"] = _default;

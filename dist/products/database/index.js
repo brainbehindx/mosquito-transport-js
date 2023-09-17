@@ -61,6 +61,13 @@ var MosquitoDbCollection = /*#__PURE__*/_createClass(function MosquitoDbCollecti
               limit: _limit
             }), config);
           },
+          random: function random(config) {
+            return findObject(_objectSpread(_objectSpread({}, _this.builder), {}, {
+              find: find,
+              limit: _limit,
+              random: true
+            }), config);
+          },
           listen: function listen(callback, error, config) {
             return listenDocument(callback, error, _objectSpread(_objectSpread({}, _this.builder), {}, {
               find: find,
@@ -354,17 +361,19 @@ var listenDocument = function listenDocument(callback, onError, builder, config)
             socket = (0, _socket2.io)("ws://".concat(projectUrl.split('://')[1]), {
               auth: {
                 mtoken: _variables.Scoped.AuthJWTToken[projectUrl],
-                commands: _objectSpread(_objectSpread({}, config), {}, {
+                commands: {
+                  config: config,
                   path: path,
                   find: findOne || find,
                   sort: sort,
                   direction: direction,
                   limit: limit
-                }),
+                },
                 dbName: dbName,
                 dbUrl: dbUrl,
                 accessKey: accessKey
-              }
+              },
+              transports: ['websocket', 'polling', 'flashsocket']
             });
             socket.emit(findOne ? '_listenDocument' : '_listenCollection');
             socket.on('mSnapshot', /*#__PURE__*/function () {
@@ -598,7 +607,8 @@ var initOnDisconnectionTask = function initOnDisconnectionTask(builder, value, t
               dbName: dbName,
               dbUrl: dbUrl,
               accessKey: accessKey
-            }
+            },
+            transports: ['websocket', 'polling', 'flashsocket']
           });
           socket.emit('_startDisconnectWriteTask');
         case 7:
@@ -618,11 +628,11 @@ var initOnDisconnectionTask = function initOnDisconnectionTask(builder, value, t
 };
 var findObject = /*#__PURE__*/function () {
   var _ref10 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee9(builder, config) {
-    var projectUrl, dbUrl, dbName, accessKey, _builder$maxRetries2, maxRetries, path, find, findOne, sort, direction, limit, disableCache, accessId, retries, readValue, g;
+    var projectUrl, dbUrl, dbName, accessKey, _builder$maxRetries2, maxRetries, path, find, findOne, sort, direction, limit, disableCache, random, accessId, retries, readValue, g;
     return _regeneratorRuntime().wrap(function _callee9$(_context9) {
       while (1) switch (_context9.prev = _context9.next) {
         case 0:
-          projectUrl = builder.projectUrl, dbUrl = builder.dbUrl, dbName = builder.dbName, accessKey = builder.accessKey, _builder$maxRetries2 = builder.maxRetries, maxRetries = _builder$maxRetries2 === void 0 ? 7 : _builder$maxRetries2, path = builder.path, find = builder.find, findOne = builder.findOne, sort = builder.sort, direction = builder.direction, limit = builder.limit, disableCache = builder.disableCache, accessId = (0, _accessor.generateRecordID)(builder, config);
+          projectUrl = builder.projectUrl, dbUrl = builder.dbUrl, dbName = builder.dbName, accessKey = builder.accessKey, _builder$maxRetries2 = builder.maxRetries, maxRetries = _builder$maxRetries2 === void 0 ? 7 : _builder$maxRetries2, path = builder.path, find = builder.find, findOne = builder.findOne, sort = builder.sort, direction = builder.direction, limit = builder.limit, disableCache = builder.disableCache, random = builder.random, accessId = (0, _accessor.generateRecordID)(builder, config);
           if (disableCache) {
             _context9.next = 6;
             break;
@@ -650,13 +660,15 @@ var findObject = /*#__PURE__*/function () {
                     case 4:
                       _context8.next = 6;
                       return fetch(_EngineApi["default"][findOne ? '_readDocument' : '_queryCollection'](projectUrl), (0, _utils.buildFetchInterface)({
-                        commands: _objectSpread(_objectSpread({}, config), {}, {
+                        commands: {
+                          config: config,
                           path: path,
                           find: findOne || find,
                           sort: sort,
                           direction: direction,
-                          limit: limit
-                        }),
+                          limit: limit,
+                          random: random
+                        },
                         dbName: dbName,
                         dbUrl: dbUrl
                       }, accessKey, _variables.Scoped.AuthJWTToken[projectUrl]));

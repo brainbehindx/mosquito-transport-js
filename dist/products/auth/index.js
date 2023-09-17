@@ -123,7 +123,8 @@ var MosquitoDbAuth = /*#__PURE__*/function () {
                 socket = (0, _socket3.io)("ws://".concat(projectUrl.split('://')[1]), {
                   extraHeaders: {
                     mtoken: _variables.Scoped.AuthJWTToken[projectUrl]
-                  }
+                  },
+                  transports: ['websocket', 'polling', 'flashsocket']
                 });
                 socket.emit("_listenUserVerification");
                 socket.on("onVerificationChanged", function (_ref2) {
@@ -201,7 +202,7 @@ var doCustomSignin = function doCustomSignin(builder, email, password) {
               token: r.result.token
             });
             _context2.next = 12;
-            return (0, _accessor.injectFreshToken)(projectUrl, r.result);
+            return (0, _accessor.injectFreshToken)(builder, r.result);
           case 12:
             _context2.next = 17;
             break;
@@ -253,7 +254,7 @@ var doCustomSignup = function doCustomSignup(builder, email, password, name, met
               token: r.result.token
             });
             _context3.next = 12;
-            return (0, _accessor.injectFreshToken)(projectUrl, r.result);
+            return (0, _accessor.injectFreshToken)(builder, r.result);
           case 12:
             _context3.next = 17;
             break;
@@ -364,7 +365,7 @@ var doGoogleSignin = function doGoogleSignin(builder, token) {
               isNewUser: r.isNewUser
             });
             _context5.next = 12;
-            return (0, _accessor.injectFreshToken)(projectUrl, r.result);
+            return (0, _accessor.injectFreshToken)(builder, r.result);
           case 12:
             _context5.next = 17;
             break;
