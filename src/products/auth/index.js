@@ -4,6 +4,7 @@ import { AuthListener, AuthTokenListener, TokenRefreshListener } from "../../hel
 import { awaitReachableServer, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
 import { CacheConstant, CacheStore, Scoped } from "../../helpers/variables";
 import { awaitRefreshToken, initTokenRefresher, injectFreshToken, listenToken, triggerAuth, triggerAuthToken } from "./accessor";
+import { decryptString } from "../../helpers/peripherals";
 
 export class MosquitoDbAuth {
     constructor(config) {
@@ -48,7 +49,7 @@ export class MosquitoDbAuth {
             if (processID !== lastInitRef) return;
 
             socket = io(`ws://${projectUrl.split('://')[1]}`, {
-                extraHeaders: { mtoken: Scoped.AuthJWTToken[projectUrl] },
+                auth: { mtoken: Scoped.AuthJWTToken[projectUrl] },
                 transports: ['websocket', 'polling', 'flashsocket']
             });
 
@@ -91,7 +92,7 @@ export class MosquitoDbAuth {
     listenAuthToken = (callback) => listenToken(callback, this.builder.projectUrl);
 
     getAuthToken = () => new Promise(resolve => {
-        const l = AuthTokenListener.startKeyListener(this.builder.projectUrl, t => {
+        const l = AuthTokenListener.listenTo(this.builder.projectUrl, t => {
             if (t === undefined) return;
             l();
             resolve(t || null);
@@ -99,13 +100,13 @@ export class MosquitoDbAuth {
     });
 
     listenAuth = (callback) =>
-        AuthListener.startKeyListener(this.builder.projectUrl, t => {
+        AuthListener.listenTo(this.builder.projectUrl, t => {
             if (t === undefined) return;
             callback?.(t || null);
         }, true);
 
     getAuth = () => new Promise(resolve => {
-        const l = AuthListener.startKeyListener(this.builder.projectUrl, t => {
+        const l = AuthListener.listenTo(this.builder.projectUrl, t => {
             if (t === undefined) return;
             l();
             resolve(t || null);
@@ -118,13 +119,18 @@ export class MosquitoDbAuth {
 }
 
 const doCustomSignin = (builder, email, password) => new Promise(async (resolve, reject) => {
-    const { projectUrl, accessKey } = builder;
+    const { projectUrl, accessKey, uglify } = builder;
 
     try {
-        const r = await (await fetch(EngineApi._customSignin(projectUrl), buildFetchInterface({
-            _: `${btoa(email)}</>${btoa(password)}`
-        }, accessKey))).json();
-        if (r.simpleError) throw r;
+        await awaitStore();
+        const f = await (await fetch(EngineApi._customSignin(projectUrl, uglify), buildFetchInterface({
+            body: { _: `${btoa(email)}</>${btoa(password)}` },
+            accessKey,
+            uglify
+        }))).json();
+        if (f.simpleError) throw f;
+
+        const r = uglify ? JSON.parse(decryptString(f.__, accessKey, accessKey)) : f;
         resolve({ user: r.result.tokenData, token: r.result.token });
         await injectFreshToken(builder, r.result);
     } catch (e) {
@@ -133,14 +139,22 @@ const doCustomSignin = (builder, email, password) => new Promise(async (resolve,
 });
 
 const doCustomSignup = (builder, email, password, name, metadata) => new Promise(async (resolve, reject) => {
-    const { projectUrl, accessKey } = builder;
+    const { projectUrl, accessKey, uglify } = builder;
 
     try {
-        const r = await (await fetch(EngineApi._customSignup(projectUrl), buildFetchInterface({
-            _: `${btoa(email)}</>${btoa(password)}</>${(btoa(name || '').trim())}`,
-            metadata
-        }, accessKey))).json();
-        if (r.simpleError) throw r;
+        await awaitStore();
+        const f = await (await fetch(EngineApi._customSignup(projectUrl), buildFetchInterface({
+            body: {
+                _: `${btoa(email)}</>${btoa(password)}</>${(btoa(name || '').trim())}`,
+                metadata,
+            },
+            accessKey,
+            uglify
+        }))).json();
+        if (f.simpleError) throw f;
+
+        const r = uglify ? JSON.parse(decryptString(f.__, accessKey, accessKey)) : f;
+
         resolve({ user: r.result.tokenData, token: r.result.token });
         await injectFreshToken(builder, r.result);
     } catch (e) {
@@ -149,7 +163,8 @@ const doCustomSignup = (builder, email, password, name, metadata) => new Promise
 });
 
 export const doSignOut = async (builder) => {
-    const { projectUrl, accessKey } = builder,
+    await awaitStore();
+    const { projectUrl, accessKey, uglify } = builder,
         lastestToken = Scoped.AuthJWTToken[projectUrl];
 
     if (CacheStore.AuthStore[projectUrl]) delete CacheStore.AuthStore[projectUrl];
@@ -162,12 +177,13 @@ export const doSignOut = async (builder) => {
     updateCacheStore();
 
     if (lastestToken) {
-        TokenRefreshListener.triggerKeyListener(projectUrl, 'ready');
+        TokenRefreshListener.dispatch(projectUrl, 'ready');
         try {
             await awaitReachableServer(projectUrl);
-            const r = await (await fetch(EngineApi._signOut(projectUrl), buildFetchInterface({
-                _: lastestToken
-            }, accessKey))).json();
+            const r = await (await fetch(EngineApi._signOut(projectUrl, uglify), buildFetchInterface({
+                body: { _: lastestToken },
+                accessKey
+            }))).json();
             if (r.simpleError) throw r;
         } catch (e) {
             throw e?.simpleError || { error: 'unexpected_error', message: `Error: ${e}` };
@@ -176,15 +192,20 @@ export const doSignOut = async (builder) => {
 }
 
 const doGoogleSignin = (builder, token) => new Promise(async (resolve, reject) => {
-    const { projectUrl, accessKey } = builder;
+    const { projectUrl, accessKey, uglify } = builder;
 
     try {
-        const r = await (await fetch(EngineApi._googleSignin(projectUrl), buildFetchInterface({
-            _: token
-        }, accessKey))).json();
+        await awaitStore();
+        const r = await (await fetch(EngineApi._googleSignin(projectUrl, uglify), buildFetchInterface({
+            body: { _: token },
+            accessKey
+        }))).json();
         if (r.simpleError) throw r;
-        resolve({ user: r.result.tokenData, token: r.result.token, isNewUser: r.isNewUser });
-        await injectFreshToken(builder, r.result);
+
+        const f = uglify ? JSON.parse(decryptString(r.__, accessKey, accessKey)) : r;
+
+        resolve({ user: f.result.tokenData, token: f.result.token, isNewUser: f.isNewUser });
+        await injectFreshToken(builder, f.result);
     } catch (e) {
         reject(e?.simpleError || { error: 'unexpected_error', message: `Error: ${e}` });
     }
