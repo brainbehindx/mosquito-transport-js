@@ -1,7 +1,7 @@
 import { ServerReachableListener, StoreReadyListener } from "./listeners";
-import { CACHE_PROTOCOL, CACHE_STORAGE_PATH, DEFAULT_CACHE_PASSWORD, LOCAL_STORAGE_PATH } from "./values";
+import { CACHE_PROTOCOL, CACHE_STORAGE_PATH, DEFAULT_CACHE_PASSWORD } from "./values";
 import { CacheStore, Scoped } from "./variables";
-import { decryptString, encryptString, niceTry } from "./peripherals";
+import { decryptString, encryptString } from "./peripherals";
 
 export const updateCacheStore = () => {
     try { window } catch (_) { return; }

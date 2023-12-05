@@ -4,7 +4,7 @@ function _typeof(obj) { "@babel/helpers - typeof"; return _typeof = "function" =
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
-exports.triggerAuthToken = exports.triggerAuth = exports.refreshToken = exports.listenToken = exports.invalidateToken = exports.injectFreshToken = exports.initTokenRefresher = exports.awaitRefreshToken = void 0;
+exports.triggerAuthToken = exports.triggerAuth = exports.listenToken = exports.invalidateToken = exports.injectFreshToken = exports.initTokenRefresher = exports.awaitRefreshToken = void 0;
 var _ = require(".");
 var _EngineApi = _interopRequireDefault(require("../../helpers/EngineApi"));
 var _listeners = require("../../helpers/listeners");
@@ -21,7 +21,7 @@ function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input ==
 function asyncGeneratorStep(gen, resolve, reject, _next, _throw, key, arg) { try { var info = gen[key](arg); var value = info.value; } catch (error) { reject(error); return; } if (info.done) { resolve(value); } else { Promise.resolve(value).then(_next, _throw); } }
 function _asyncToGenerator(fn) { return function () { var self = this, args = arguments; return new Promise(function (resolve, reject) { var gen = fn.apply(self, args); function _next(value) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "next", value); } function _throw(err) { asyncGeneratorStep(gen, resolve, reject, _next, _throw, "throw", err); } _next(undefined); }); }; }
 var listenToken = function listenToken(callback, projectUrl) {
-  return _listeners.AuthTokenListener.startKeyListener(projectUrl, function (t) {
+  return _listeners.AuthTokenListener.listenTo(projectUrl, function (t) {
     if (t === undefined) return;
     callback === null || callback === void 0 ? void 0 : callback(t || null);
   }, true);
@@ -59,7 +59,7 @@ var triggerAuth = /*#__PURE__*/function () {
       while (1) switch (_context2.prev = _context2.next) {
         case 0:
           l = (_CacheStore$AuthStore = _variables.CacheStore.AuthStore[projectUrl]) === null || _CacheStore$AuthStore === void 0 ? void 0 : _CacheStore$AuthStore.tokenData;
-          _listeners.AuthListener.triggerKeyListener(projectUrl, l ? _objectSpread({}, l) : null);
+          _listeners.AuthListener.dispatch(projectUrl, l ? _objectSpread({}, l) : null);
         case 2:
         case "end":
           return _context2.stop();
@@ -77,8 +77,11 @@ var triggerAuthToken = /*#__PURE__*/function () {
     return _regeneratorRuntime().wrap(function _callee3$(_context3) {
       while (1) switch (_context3.prev = _context3.next) {
         case 0:
-          _listeners.AuthTokenListener.triggerKeyListener(projectUrl, ((_CacheStore$AuthStore2 = _variables.CacheStore.AuthStore[projectUrl]) === null || _CacheStore$AuthStore2 === void 0 ? void 0 : _CacheStore$AuthStore2.token) || null);
-        case 1:
+          _context3.next = 2;
+          return (0, _utils.awaitStore)();
+        case 2:
+          _listeners.AuthTokenListener.dispatch(projectUrl, ((_CacheStore$AuthStore2 = _variables.CacheStore.AuthStore[projectUrl]) === null || _CacheStore$AuthStore2 === void 0 ? void 0 : _CacheStore$AuthStore2.token) || null);
+        case 3:
         case "end":
           return _context3.stop();
       }
@@ -91,7 +94,7 @@ var triggerAuthToken = /*#__PURE__*/function () {
 exports.triggerAuthToken = triggerAuthToken;
 var awaitRefreshToken = function awaitRefreshToken(projectUrl) {
   return new Promise(function (resolve) {
-    var l = _listeners.TokenRefreshListener.startKeyListener(projectUrl, function (v) {
+    var l = _listeners.TokenRefreshListener.listenTo(projectUrl, function (v) {
       if (v === 'ready') {
         l();
         resolve();
@@ -103,43 +106,46 @@ exports.awaitRefreshToken = awaitRefreshToken;
 var initTokenRefresher = /*#__PURE__*/function () {
   var _ref4 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee4(config, forceRefresh) {
     var _CacheStore$AuthStore3;
-    var projectUrl, accessKey, maxRetries, l, hasExpire, rizz;
+    var projectUrl, maxRetries, l, hasExpire, rizz;
     return _regeneratorRuntime().wrap(function _callee4$(_context4) {
       while (1) switch (_context4.prev = _context4.next) {
         case 0:
-          projectUrl = config.projectUrl, accessKey = config.accessKey, maxRetries = config.maxRetries;
+          projectUrl = config.projectUrl, maxRetries = config.maxRetries;
+          _context4.next = 3;
+          return (0, _utils.awaitStore)();
+        case 3:
           l = (_CacheStore$AuthStore3 = _variables.CacheStore.AuthStore[projectUrl]) === null || _CacheStore$AuthStore3 === void 0 ? void 0 : _CacheStore$AuthStore3.tokenData;
           clearTimeout(_variables.Scoped.TokenRefreshTimer[projectUrl]);
           if (!l) {
-            _context4.next = 14;
+            _context4.next = 16;
             break;
           }
           hasExpire = Date.now() >= l.expOn - 60000, rizz = function rizz() {
-            return refreshToken(projectUrl, accessKey, ++_variables.Scoped.LastTokenRefreshRef[projectUrl], maxRetries, maxRetries);
+            return refreshToken(config, ++_variables.Scoped.LastTokenRefreshRef[projectUrl], maxRetries, maxRetries);
           };
           if (!(hasExpire || forceRefresh)) {
-            _context4.next = 10;
+            _context4.next = 12;
             break;
           }
-          if (hasExpire) _listeners.TokenRefreshListener.triggerKeyListener(projectUrl);
+          if (hasExpire) _listeners.TokenRefreshListener.dispatch(projectUrl);
           return _context4.abrupt("return", rizz());
-        case 10:
-          _listeners.TokenRefreshListener.triggerKeyListener(projectUrl, 'ready');
+        case 12:
+          _listeners.TokenRefreshListener.dispatch(projectUrl, 'ready');
           _variables.Scoped.TokenRefreshTimer[projectUrl] = setTimeout(function () {
-            _listeners.TokenRefreshListener.triggerKeyListener(projectUrl);
+            _listeners.TokenRefreshListener.dispatch(projectUrl);
             rizz();
           }, l.expOn - Date.now() - 60000);
-        case 12:
-          _context4.next = 17;
-          break;
         case 14:
+          _context4.next = 19;
+          break;
+        case 16:
           if (!forceRefresh) {
-            _context4.next = 17;
+            _context4.next = 19;
             break;
           }
-          _listeners.TokenRefreshListener.triggerKeyListener(projectUrl, 'ready');
+          _listeners.TokenRefreshListener.dispatch(projectUrl, 'ready');
           return _context4.abrupt("return", (0, _utils.simplifyError)('no_token_yet', 'No token is available to initiate a refresh').simpleError);
-        case 17:
+        case 19:
         case "end":
           return _context4.stop();
       }
@@ -150,46 +156,52 @@ var initTokenRefresher = /*#__PURE__*/function () {
   };
 }();
 exports.initTokenRefresher = initTokenRefresher;
-var refreshToken = function refreshToken(projectUrl, accessKey, processRef) {
-  var remainRetries = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 7;
-  var initialRetries = arguments.length > 4 && arguments[4] !== undefined ? arguments[4] : 7;
+var refreshToken = function refreshToken(builder, processRef) {
+  var remainRetries = arguments.length > 2 && arguments[2] !== undefined ? arguments[2] : 7;
+  var initialRetries = arguments.length > 3 && arguments[3] !== undefined ? arguments[3] : 7;
   return new Promise( /*#__PURE__*/function () {
     var _ref5 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee5(resolve, reject) {
-      var lostProcess, token, r, _e$simpleError, l;
+      var projectUrl, accessKey, uglify, lostProcess, token, r, _e$simpleError, l;
       return _regeneratorRuntime().wrap(function _callee5$(_context5) {
         while (1) switch (_context5.prev = _context5.next) {
           case 0:
+            projectUrl = builder.projectUrl, accessKey = builder.accessKey, uglify = builder.uglify;
             lostProcess = (0, _utils.simplifyError)('process_lost', 'The token refresh process has been lost and replace with another one');
-            _context5.prev = 1;
+            _context5.prev = 2;
             token = _variables.Scoped.AuthJWTToken[projectUrl];
-            _context5.next = 5;
-            return fetch(_EngineApi["default"]._refreshAuthToken(projectUrl), (0, _utils.buildFetchInterface)({
-              _: _variables.Scoped.AuthJWTToken[projectUrl]
-            }, accessKey));
-          case 5:
-            _context5.next = 7;
+            _context5.next = 6;
+            return fetch(_EngineApi["default"]._refreshAuthToken(projectUrl, uglify), (0, _utils.buildFetchInterface)({
+              body: {
+                _: _variables.Scoped.AuthJWTToken[projectUrl]
+              },
+              projectUrl: projectUrl,
+              accessKey: accessKey,
+              uglify: uglify
+            }));
+          case 6:
+            _context5.next = 8;
             return _context5.sent.json();
-          case 7:
+          case 8:
             r = _context5.sent;
             if (!(processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl])) {
-              _context5.next = 10;
+              _context5.next = 11;
               break;
             }
             throw lostProcess;
-          case 10:
+          case 11:
             if (!r.simpleError) {
-              _context5.next = 12;
+              _context5.next = 13;
               break;
             }
             throw r;
-          case 12:
+          case 13:
             if (!_variables.CacheStore.AuthStore[projectUrl]) {
-              _context5.next = 22;
+              _context5.next = 23;
               break;
             }
             _variables.CacheStore.AuthStore[projectUrl] = _objectSpread({}, r.result);
             _variables.Scoped.AuthJWTToken[projectUrl] = r.result.token;
-            invalidateToken(projectUrl, accessKey, token);
+            invalidateToken(builder, token);
             resolve(r.result.token);
             triggerAuthToken(projectUrl);
             (0, _utils.updateCacheStore)();
@@ -198,16 +210,16 @@ var refreshToken = function refreshToken(projectUrl, accessKey, processRef) {
               accessKey: accessKey,
               maxRetries: initialRetries
             });
-            _context5.next = 23;
+            _context5.next = 24;
             break;
-          case 22:
-            throw lostProcess;
           case 23:
-            _context5.next = 28;
+            throw lostProcess;
+          case 24:
+            _context5.next = 29;
             break;
-          case 25:
-            _context5.prev = 25;
-            _context5.t0 = _context5["catch"](1);
+          case 26:
+            _context5.prev = 26;
+            _context5.t0 = _context5["catch"](2);
             if (_context5.t0.simpleError) {
               console.error("refreshToken error: ".concat((_e$simpleError = _context5.t0.simpleError) === null || _e$simpleError === void 0 ? void 0 : _e$simpleError.message));
               (0, _.doSignOut)({
@@ -219,74 +231,79 @@ var refreshToken = function refreshToken(projectUrl, accessKey, processRef) {
               console.error("refreshToken retry exceeded, waiting for 2min before starting another retry");
               setTimeout(function () {
                 if (processRef === _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
-                  refreshToken(projectUrl, accessKey, processRef, initialRetries, initialRetries).then(resolve, reject);
+                  refreshToken(builder, processRef, initialRetries, initialRetries).then(resolve, reject);
                 } else reject(lostProcess.simpleError);
               }, 120000);
             } else {
               l = (0, _peripherals.listenReachableServer)(function (c) {
                 if (c) {
                   l();
-                  refreshToken(projectUrl, accessKey, processRef, remainRetries - 1, initialRetries).then(resolve, reject);
+                  refreshToken(builder, processRef, remainRetries - 1, initialRetries).then(resolve, reject);
                 } else if (processRef !== _variables.Scoped.LastTokenRefreshRef[projectUrl]) {
                   reject(lostProcess.simpleError);
                   l();
                 }
               }, projectUrl);
             }
-          case 28:
+          case 29:
           case "end":
             return _context5.stop();
         }
-      }, _callee5, null, [[1, 25]]);
+      }, _callee5, null, [[2, 26]]);
     }));
     return function (_x7, _x8) {
       return _ref5.apply(this, arguments);
     };
   }());
 };
-exports.refreshToken = refreshToken;
 var invalidateToken = /*#__PURE__*/function () {
-  var _ref6 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(projectUrl, accessKey, token) {
-    var r;
+  var _ref6 = _asyncToGenerator( /*#__PURE__*/_regeneratorRuntime().mark(function _callee6(builder, token) {
+    var _projectUrl, accessKey, uglify, r;
     return _regeneratorRuntime().wrap(function _callee6$(_context6) {
       while (1) switch (_context6.prev = _context6.next) {
         case 0:
           _context6.prev = 0;
-          _context6.next = 3;
-          return (0, _utils.awaitReachableServer)(projectUrl);
-        case 3:
-          _context6.next = 5;
-          return fetch(_EngineApi["default"]._invalidateToken(projectUrl), (0, _utils.buildFetchInterface)({
-            _: token
-          }, accessKey));
-        case 5:
-          _context6.next = 7;
+          _projectUrl = builder.projectUrl, accessKey = builder.accessKey, uglify = builder.uglify;
+          _context6.next = 4;
+          return (0, _utils.awaitReachableServer)(_projectUrl);
+        case 4:
+          _context6.next = 6;
+          return fetch(_EngineApi["default"]._invalidateToken(_projectUrl, uglify), (0, _utils.buildFetchInterface)({
+            body: {
+              _: token
+            },
+            accessKey: accessKey,
+            uglify: uglify,
+            projectUrl: _projectUrl
+          }));
+        case 6:
+          _context6.next = 8;
           return _context6.sent.json();
-        case 7:
+        case 8:
           r = _context6.sent;
           if (!r.simpleError) {
-            _context6.next = 10;
+            _context6.next = 11;
             break;
           }
           throw r;
-        case 10:
-          _context6.next = 16;
+        case 11:
+          _context6.next = 17;
           break;
-        case 12:
-          _context6.prev = 12;
+        case 13:
+          _context6.prev = 13;
           _context6.t0 = _context6["catch"](0);
           console.error('invalidateToken err: ', _context6.t0);
           throw (_context6.t0 === null || _context6.t0 === void 0 ? void 0 : _context6.t0.simpleError) || {
             error: 'unexpected_error',
             message: "Error: ".concat(_context6.t0)
           };
-        case 16:
+        case 17:
         case "end":
           return _context6.stop();
       }
-    }, _callee6, null, [[0, 12]]);
+    }, _callee6, null, [[0, 13]]);
   }));
-  return function invalidateToken(_x9, _x10, _x11) {
+  return function invalidateToken(_x9, _x10) {
     return _ref6.apply(this, arguments);
   };
 }();

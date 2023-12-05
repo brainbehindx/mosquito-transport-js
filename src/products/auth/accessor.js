@@ -2,7 +2,7 @@ import { doSignOut } from ".";
 import EngineApi from "../../helpers/EngineApi";
 import { AuthListener, AuthTokenListener, TokenRefreshListener } from "../../helpers/listeners";
 import { listenReachableServer } from "../../helpers/peripherals";
-import { awaitReachableServer, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
+import { awaitReachableServer, awaitStore, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
 
 export const listenToken = (callback, projectUrl) =>
@@ -32,7 +32,6 @@ export const triggerAuthToken = async (projectUrl) => {
     await awaitStore();
     AuthTokenListener.dispatch(projectUrl, CacheStore.AuthStore[projectUrl]?.token || null);
 }
-
 
 export const awaitRefreshToken = (projectUrl) => new Promise(resolve => {
     const l = TokenRefreshListener.listenTo(projectUrl, v => {

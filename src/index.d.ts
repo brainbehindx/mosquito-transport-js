@@ -30,10 +30,9 @@ interface ReleaseCacheOption {
     cachePassword?: string;
     /**
      * select the mechanism for storing data locally
-     * - async-storage: uses [@react-native-async-storage/async-storage](https://github.com/react-native-async-storage/async-storage) for storing data, make sure you have this package installed before setting this as the value
-     * - reat-native-fs: uses [reat-native-fs](https://github.com/itinance/react-native-fs) for storing data, make sure you have this package installed before setting this as the value
+     * - local-storage: uses [@react-native-async-storage/async-storage]() for storing data
      */
-    cacheProtocol?: 'async-storage' | 'reat-native-fs';
+    cacheProtocol?: 'local-storage';
 }
 
 export class MosquitoDbClient {

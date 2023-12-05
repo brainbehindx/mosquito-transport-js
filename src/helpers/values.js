@@ -1,19 +1,12 @@
-import { encode as btoa } from 'base-64';
-import { Platform } from 'react-native';
 
 export const CACHE_STORAGE_PATH = btoa('mosquitoDbFreezer:__'),
     DEFAULT_CACHE_PASSWORD = btoa('mosquitoCachePassword:__'),
-    LOCAL_STORAGE_PATH = () => {
-        const fs = require('react-native-fs');
-        return `${Platform.OS === 'android' ? fs.ExternalCachesDirectoryPath : fs.CachesDirectoryPath}/${btoa('mosquitoFreezer')}`;
-    },
     DEFAULT_DB_NAME = 'DEFAULT_DB',
     DEFAULT_DB_URL = 'mongodb://127.0.0.1:27017',
     DEFAULT_ENCRYPT_IV = '****';
 
 export const CACHE_PROTOCOL = {
-    ASYNC_STORAGE: 'async-storage',
-    REACT_NATIVE_FS: 'reat-native-fs'
+    LOCAL_STORAGE: 'local-storage'
 };
 
 export const RETRIEVAL = {

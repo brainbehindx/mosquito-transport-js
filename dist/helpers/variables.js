@@ -12,19 +12,33 @@ function _toPropertyKey(arg) { var key = _toPrimitive(arg, "string"); return _ty
 function _toPrimitive(input, hint) { if (_typeof(input) !== "object" || input === null) return input; var prim = input[Symbol.toPrimitive]; if (prim !== undefined) { var res = prim.call(input, hint || "default"); if (_typeof(res) !== "object") return res; throw new TypeError("@@toPrimitive must return a primitive value."); } return (hint === "string" ? String : Number)(input); }
 var Scoped = {
   PendingIte: 0,
+  AnyProcessIte: 0,
   IS_CONNECTED: {},
+  IS_TOKEN_READY: {},
+  InitializedProject: {},
+  ReleaseCacheData: undefined,
   AuthJWTToken: {},
   cacheStorageReducer: undefined,
   TokenRefreshTimer: {},
   LastTokenRefreshRef: {},
-  StorageProcessID: 0
+  StorageProcessID: 0,
+  PendingFetchCollective: {
+    pendingProcess: {},
+    pendingResolution: {}
+  },
+  PendingDbReadCollective: {
+    pendingProcess: {},
+    pendingResolution: {}
+  }
 };
 exports.Scoped = Scoped;
 var CacheStore = {
   DatabaseStore: {},
   DatabaseRecords: {},
+  DatabaseCountResult: {},
   AuthStore: {},
-  PendingWrites: {}
+  PendingWrites: {},
+  FetchedStore: {}
 };
 exports.CacheStore = CacheStore;
 var CacheConstant = _objectSpread({}, CacheStore);
