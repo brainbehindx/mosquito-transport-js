@@ -42,6 +42,8 @@ export const awaitRefreshToken = (projectUrl) => new Promise(resolve => {
     }, true);
 });
 
+export const listenTokenReady = (callback, projectUrl) => TokenRefreshListener.listenTo(projectUrl, callback, true);
+
 export const initTokenRefresher = async (config, forceRefresh) => {
     const { projectUrl, maxRetries } = config;
     await awaitStore();
@@ -60,7 +62,7 @@ export const initTokenRefresher = async (config, forceRefresh) => {
             Scoped.TokenRefreshTimer[projectUrl] = setTimeout(() => {
                 TokenRefreshListener.dispatch(projectUrl);
                 rizz();
-            }, l.expOn - Date.now() - 60000);
+            }, l.expOn - (Date.now() - 60000));
         }
     } else if (forceRefresh) {
         TokenRefreshListener.dispatch(projectUrl, 'ready');
