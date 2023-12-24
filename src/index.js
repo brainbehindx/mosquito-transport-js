@@ -23,7 +23,7 @@ const {
     _listenUserVerification
 } = EngineApi;
 
-class MosquitoDbClient {
+export class MosquitoDbClient {
     constructor(config) {
         validateMosquitoDbConfig(config);
         this.config = {
@@ -314,6 +314,5 @@ export {
     TIMESTAMP,
     DOCUMENT_EXTRACTION,
     FIND_GEO_JSON,
-    GEO_JSON,
-    MosquitoDbClient
+    GEO_JSON
 };

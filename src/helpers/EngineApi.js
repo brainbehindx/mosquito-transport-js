@@ -1,4 +1,3 @@
-import { encode as btoa } from 'base-64';
 
 const apis = {
     _readDocument: (baseApi, ugly) => `${baseApi}/${ugly ? btoa(apis._readDocument(baseApi)) : '_readDocument'}`,
