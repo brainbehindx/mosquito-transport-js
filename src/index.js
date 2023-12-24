@@ -1,16 +1,16 @@
-import { IS_WHOLE_NUMBER, encryptString, listenReachableServer } from "./helpers/peripherals";
+import { IS_WHOLE_NUMBER, deserializeE2E, listenReachableServer, serializeE2E } from "./helpers/peripherals";
 import { releaseCacheStore } from "./helpers/utils";
-import { CacheStore, Scoped } from "./helpers/variables";
+import { Scoped } from "./helpers/variables";
 import { MosquitoDbAuth } from "./products/auth";
-import { MosquitoDbCollection } from "./products/database";
+import { MosquitoDbCollection, batchWrite } from "./products/database";
 import { MosquitoDbStorage } from "./products/storage";
 import { ServerReachableListener, TokenRefreshListener } from "./helpers/listeners";
-import { awaitRefreshToken, initTokenRefresher, listenToken, listenTokenReady, triggerAuth, triggerAuthToken } from "./products/auth/accessor";
+import { initTokenRefresher, listenTokenReady, triggerAuthToken } from "./products/auth/accessor";
 import { TIMESTAMP, DOCUMENT_EXTRACTION, FIND_GEO_JSON, GEO_JSON } from "./products/database/types";
 import { mfetch } from "./products/http_callable";
 import { io } from "socket.io-client";
 import { validateCollectionPath } from "./products/database/validator";
-import { CACHE_PROTOCOL } from "./helpers/values";
+import { CACHE_PROTOCOL, Regexs } from "./helpers/values";
 import { trySendPendingWrite } from "./products/database/accessor";
 import EngineApi from './helpers/EngineApi';
 import { parse, stringify } from 'json-buffer';
@@ -28,19 +28,20 @@ export class MosquitoDbClient {
         validateMosquitoDbConfig(config);
         this.config = {
             ...config,
-            uglify: config.uglifyRequest,
+            uglify: config.enableE2E_Encryption,
             apiUrl: config.projectUrl,
             projectUrl: config.projectUrl.split('/').filter((_, i, a) => i !== a.length - 1).join('/')
         };
+        const { projectUrl } = this.config;
+
+        this.config.baseUrl = projectUrl.split('://')[1];
+
         if (!Scoped.ReleaseCacheData)
             throw `releaseCache must be called before creating any mosquitodb instance`;
-
-        const { projectUrl } = this.config;
 
         if (!Scoped.InitializedProject[projectUrl]) {
             Scoped.InitializedProject[projectUrl] = true;
             Scoped.LastTokenRefreshRef[projectUrl] = 0;
-            triggerAuth(projectUrl);
             triggerAuthToken(projectUrl);
             initTokenRefresher({ ...this.config }, true);
 
@@ -85,13 +86,15 @@ export class MosquitoDbClient {
         validateCollectionPath(path);
         return new MosquitoDbCollection({ ...this.config, path });
     }
+    batchWrite = batchWrite;
     auth = () => new MosquitoDbAuth({ ...this.config });
     storage = () => new MosquitoDbStorage({ ...this.config });
     fetchHttp = (endpoint, init, config) => mfetch(endpoint, init, { ...this.config, method: config });
     listenReachableServer = (callback) => listenReachableServer(callback, this.config.projectUrl);
+
     getSocket = (configOpts) => {
-        const { disableAuth } = configOpts || {},
-            { projectUrl, uglify, accessKey } = this.config;
+        const { disableAuth, authHandshake } = configOpts || {},
+            { projectUrl, uglify, accessKey, serverE2E_PublicKey } = this.config;
 
         const restrictedRoute = [
             _listenCollection,
@@ -111,7 +114,28 @@ export class MosquitoDbClient {
 
         let hasCancelled,
             socket,
-            tokenListener;
+            tokenListener,
+            clientPrivateKey;
+
+        const listenerCallback = (callback) => function () {
+            const [args, ...restArgs] = [...arguments];
+            let res;
+
+            if (uglify) {
+                res = parse(deserializeE2E(args, serverE2E_PublicKey, clientPrivateKey));
+            } else res = args;
+
+            callback?.(...res || [], ...typeof restArgs === 'function' ? [function () {
+                const args = [...arguments];
+                let res;
+
+                if (uglify) {
+                    res = serializeE2E(stringify(args), undefined, serverE2E_PublicKey)[0];
+                } else res = args;
+
+                restArgs(res);
+            }] : []);
+        }
 
         const emit = ({ timeout, promise, emittion: emittionx }) => new Promise(async (resolve, reject) => {
             const [route, ...emittion] = emittionx;
@@ -129,26 +153,33 @@ export class MosquitoDbClient {
                 reject(new Error('emittion timeout'));
             }, timeout);
 
+            await socketReadyPromise;
             if (hasResolved) return;
             clearTimeout(timer);
-            await socketReadyPromise;
 
             try {
-                const h = isNaN(timeout) ? socket : socket.timeout(timeout - (Date.now() - stime)),
-                    { encryptionKey = accessKey } = CacheStore.AuthStore?.[projectUrl]?.tokenData || {};
+                const h = isNaN(timeout) ? socket : socket.timeout(timeout - (Date.now() - stime));
 
                 const lastEmit = emittion.slice(-1)[0],
                     mit = typeof lastEmit === 'function' ? emittion.slice(0, emittion.length - 1) : emittion;
 
+                const [reqBuilder, [privateKey]] = uglify ? serializeE2E(stringify(mit), undefined, serverE2E_PublicKey) : [undefined, []];
+
                 const p = await h[promise ? 'emitWithAck' : 'emit'](route,
-                    uglify ? [
-                        encryptString(stringify(mit), accessKey, disableAuth ? accessKey : encryptionKey)
-                    ] : mit,
-                    typeof lastEmit === 'function' ? function () {
-                        lastEmit(...[...arguments]);
-                    } : undefined
+                    ...uglify ? [reqBuilder] : [mit],
+                    ...typeof lastEmit === 'function' ? [function () {
+                        const args = [...arguments];
+                        let res;
+
+                        if (uglify) {
+                            res = parse(deserializeE2E(args[0], serverE2E_PublicKey, privateKey));
+                        } else res = args;
+
+                        lastEmit(...res || []);
+                    }] : []
                 );
-                resolve(promise ? p : undefined);
+
+                resolve(promise ? parse(deserializeE2E(p, serverE2E_PublicKey, privateKey))[0] : undefined);
             } catch (e) {
                 reject(e);
             }
@@ -156,16 +187,21 @@ export class MosquitoDbClient {
 
         const init = async () => {
             if (hasCancelled) return;
-
             const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
+            const [reqBuilder, [privateKey]] = serializeE2E({ accessKey, a_extras: authHandshake }, mtoken, serverE2E_PublicKey);
+
             socket = io(`ws://${projectUrl.split('://')[1]}`, {
-                auth: {
+                auth: uglify ? {
+                    ugly: true,
+                    e2e: reqBuilder
+                } : {
                     ...mtoken ? { mtoken } : {},
                     ugly: uglify,
-                    isOutsider: true,
-                    accessKey: encryptString(accessKey, accessKey, '_')
+                    a_extras: authHandshake,
+                    accessKey
                 }
             });
+            clientPrivateKey = privateKey;
 
             socketReadyCallback();
             socketListenerList.forEach(([_, method, route, callback]) => {
@@ -212,24 +248,28 @@ export class MosquitoDbClient {
             on: async (route, callback) => {
                 if (restrictedRoute.includes(route))
                     throw `${route} is a restricted socket path, avoid using any of ${restrictedRoute}`;
-                const ref = ++socketListenerIte;
-                socketListenerList.push([ref, 'on', route, callback]);
-                if (socket) socket.on(route, callback);
+                const ref = ++socketListenerIte,
+                    listener = listenerCallback(callback);
+
+                socketListenerList.push([ref, 'on', route, listener]);
+                if (socket) socket.on(route, listener);
 
                 return () => {
-                    if (socket) socket.off(route, callback);
+                    if (socket) socket.off(route, listener);
                     socketListenerList = socketListenerList.filter(([id]) => id !== ref);
                 }
             },
             once: async (route, callback) => {
                 if (restrictedRoute.includes(route))
                     throw `${route} is a restricted socket path, avoid using any of ${restrictedRoute}`;
-                const ref = ++socketListenerIte;
-                socketListenerList.push([ref, 'once', route, callback]);
-                if (socket) socket.once(route, callback);
+                const ref = ++socketListenerIte,
+                    listener = listenerCallback(callback);
+
+                socketListenerList.push([ref, 'once', route, listener]);
+                if (socket) socket.once(route, listener);
 
                 return () => {
-                    if (socket) socket.off(route, callback);
+                    if (socket) socket.off(route, listener);
                     socketListenerList = socketListenerList.filter(([id]) => id !== ref);
                 }
             },
@@ -237,7 +277,7 @@ export class MosquitoDbClient {
                 hasCancelled = true;
                 tokenListener?.();
                 if (socket) socket.close();
-                socketListenerList = undefined;
+                socketListenerList = [];
             }
         }
     }
@@ -274,7 +314,7 @@ const validator = {
             throw `Invalid value supplied to heapMemory, value must be number and greater than zero`;
     },
     projectUrl: (v) => {
-        if (typeof v !== 'string' || !v.trim())
+        if (typeof v !== 'string' || Regexs.LINK().test(v.trim()))
             throw `Invalid value supplied to projectUrl, value must be a string and greater than one`;
     },
     disableCache: (v) => {
@@ -289,9 +329,13 @@ const validator = {
         if (typeof v !== 'number' || v <= 0 || !IS_WHOLE_NUMBER(v))
             throw `Invalid value supplied to maxRetries, value must be whole number and greater than zero`;
     },
-    uglifyRequest: () => {
+    enableE2E_Encryption: (v) => {
         if (typeof v !== 'boolean')
-            throw `Invalid value supplied to uglifyRequest, value must be a boolean`;
+            throw `Invalid value supplied to enableE2E_Encryption, value must be a boolean`;
+    },
+    serverE2E_PublicKey: (v) => {
+        if (typeof v !== 'string' || !v.trim())
+            throw `Invalid value supplied to serverETE_PublicKey, value must be string and greater than one`;
     }
 };
 
@@ -306,6 +350,8 @@ const validateMosquitoDbConfig = (config) => {
         validator[k](config[k]);
     }
 
+    if (config.enableE2E_Encryption && !config.serverE2E_PublicKey)
+        throw '"serverE2E_PublicKey" is missing, enabling end-to-end encryption requires a public encryption key from the server';
     if (!config['projectUrl']) throw 'projectUrl is a required property in MosquitoDb() constructor';
     if (!config['accessKey']) throw 'accessKey is a required property in MosquitoDb() constructor';
 }

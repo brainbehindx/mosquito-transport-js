@@ -1,7 +1,7 @@
 import { ServerReachableListener, StoreReadyListener } from "./listeners";
 import { CACHE_PROTOCOL, CACHE_STORAGE_PATH, DEFAULT_CACHE_PASSWORD } from "./values";
 import { CacheStore, Scoped } from "./variables";
-import { decryptString, encryptString } from "./peripherals";
+import { decryptString, encryptString, niceTry, serializeE2E } from "./peripherals";
 
 export const updateCacheStore = () => {
     try { window } catch (_) { return; }
@@ -90,20 +90,20 @@ export const getReachableServer = (projectUrl) => new Promise(resolve => {
     }, true);
 });
 
-export const buildFetchInterface = ({ body, accessKey, authToken, method, uglify, projectUrl }) => {
-    const { encryptionKey = accessKey } = CacheStore.AuthStore?.[projectUrl]?.tokenData || {};
-    body = JSON.stringify({ ...body });
+export const buildFetchInterface = ({ body, accessKey, authToken, method, uglify, serverE2E_PublicKey }) => {
+    if (!uglify) body = JSON.stringify({ ...body });
+    const [plate, keyPair] = uglify ? serializeE2E(body, authToken, serverE2E_PublicKey) : [undefined, []];
 
-    return {
-        body: uglify ? JSON.stringify({ __: encryptString(body, accessKey, authToken ? encryptionKey : accessKey) }) : body,
+    return [{
+        body: uglify ? plate : body,
         cache: 'no-cache',
         headers: {
-            'Content-type': 'application/json',
-            'Authorization': `Bearer ${encryptString(accessKey, accessKey, '_')}`,
-            ...(authToken ? { 'Mosquitodb-Token': authToken } : {})
+            'Content-type': uglify ? 'text/plain' : 'application/json',
+            'Authorization': `Bearer ${accessKey}`,
+            ...((authToken && !uglify) ? { 'Mosquito-Token': authToken } : {})
         },
         method: method || 'POST'
-    };
+    }, keyPair];
 };
 
 export const simplifyError = (error, message) => ({

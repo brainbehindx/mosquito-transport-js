@@ -36,8 +36,10 @@
     "crypto-js": "^4.2.0",
     "json-buffer": "^3.0.1",
     "lodash": "^4.17.21",
+    "set-large-timeout": "^1.0.1",
     "socket.io-client": "^4.6.2",
-    "subscription-listener": "^1.0.9"
+    "subscription-listener": "^1.0.9",
+    "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
     "@babel/cli": "^7.21.5",

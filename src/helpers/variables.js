@@ -10,6 +10,7 @@ export const Scoped = {
     TokenRefreshTimer: {},
     LastTokenRefreshRef: {},
     StorageProcessID: 0,
+    InitiatedForcedToken: {},
     PendingFetchCollective: {
         pendingProcess: {},
         pendingResolution: {}
