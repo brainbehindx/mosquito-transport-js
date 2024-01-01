@@ -191,14 +191,17 @@ export class MosquitoDbClient {
             const [reqBuilder, [privateKey]] = serializeE2E({ accessKey, a_extras: authHandshake }, mtoken, serverE2E_PublicKey);
 
             socket = io(`ws://${projectUrl.split('://')[1]}`, {
-                auth: uglify ? {
-                    ugly: true,
-                    e2e: reqBuilder
-                } : {
-                    ...mtoken ? { mtoken } : {},
-                    ugly: uglify,
-                    a_extras: authHandshake,
-                    accessKey
+                auth: {
+                    ...uglify ? {
+                        ugly: true,
+                        e2e: reqBuilder
+                    } : {
+                        ...mtoken ? { mtoken } : {},
+                        ugly: uglify,
+                        a_extras: authHandshake,
+                        accessKey
+                    },
+                    transports: ['websocket', 'polling', 'flashsocket']
                 }
             });
             clientPrivateKey = privateKey;

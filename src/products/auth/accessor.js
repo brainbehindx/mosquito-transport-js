@@ -5,7 +5,6 @@ import { AuthTokenListener, TokenRefreshListener } from "../../helpers/listeners
 import { deserializeE2E, listenReachableServer, simplifyCaughtError } from "../../helpers/peripherals";
 import { awaitReachableServer, awaitStore, buildFetchInterface, simplifyError, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
-import { decode as atob } from 'base-64';
 
 export const listenToken = (callback, projectUrl) =>
     AuthTokenListener.listenTo(projectUrl, t => {

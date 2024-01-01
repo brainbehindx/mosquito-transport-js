@@ -12,10 +12,14 @@ interface MosquitoDbConfig {
      * setting this to true will encrypt all outgoing and incoming request. This is recommended for production applications to enable end-to-end encryption using [Tweetnacl](https://github.com/dchest/tweetnacl-js) and to prevent request interception by browser extensions, network intermediaries or other hijacking tools
      */
     enableE2E_Encryption?: boolean;
+    /**
+     * this is the base64 public key for end-to-end encryption on the server
+     */
+    serverE2E_PublicKey?: string;
 }
 
 interface GetDatabase {
-    collection: (path: string) => MosquitoDbCollection
+    collection: (path: string) => MosquitoDbCollection;
 }
 
 interface mtimestamp { $timestamp: 'now' }
@@ -46,6 +50,13 @@ interface MosquitoDbSocket {
     destroy: () => void;
 }
 
+interface BatchWriteValue {
+    scope: 'setOne' | 'setMany' | 'updateOne' | 'mergeOne' | 'deleteOne' | 'deleteMany' | 'replaceOne' | 'putOne';
+    find?: DocumentFind;
+    value?: DocumentWriteValue[] | DocumentWriteValue;
+    path: string;
+}
+
 export class MosquitoDbClient {
     constructor(config: MosquitoDbConfig);
     static releaseCache(option?: ReleaseCacheOption): void;
@@ -55,7 +66,8 @@ export class MosquitoDbClient {
     storage(): MosquitoDbStorage;
     fetchHttp(endpoint: string, init?: RequestInit, config?: FetchHttpConfig): Promise<Response>;
     listenReachableServer(callback: (reachable: boolean) => void): () => void;
-    getSocket(options: { disableAuth?: boolean }): MosquitoDbSocket;
+    getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): MosquitoDbSocket;
+    batchWrite(map: BatchWriteValue[], config?: WriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
 
 interface MosquitoDbCollection {
@@ -107,7 +119,7 @@ interface MosquitoDbCollection {
     });
     onDisconnect: () => ({
         setOne: (value: DocumentWriteValue) => () => void;
-        setMany: (value: DocumentWriteValue) => () => void;
+        setMany: (value: DocumentWriteValue[]) => () => void;
         updateOne: (find: DocumentFind, value: DocumentWriteValue) => () => void;
         updateMany: (find: DocumentFind, value: DocumentWriteValue) => () => void;
         mergeOne: (find: DocumentFind, value: DocumentWriteValue) => () => void;
