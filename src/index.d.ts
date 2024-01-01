@@ -1,6 +1,4 @@
-import { Buffer } from "buffer";
-
-interface MosquitoDbConfig {
+interface MTConfig {
     dbName?: string;
     dbUrl?: string;
     heapMemory?: number;
@@ -9,7 +7,7 @@ interface MosquitoDbConfig {
     accessKey: string;
     maxRetries?: number;
     /**
-     * setting this to true will encrypt all outgoing and incoming request. This is recommended for production applications to enable end-to-end encryption using [Tweetnacl](https://github.com/dchest/tweetnacl-js) and to prevent request interception by browser extensions, network intermediaries or other hijacking tools
+     * setting this to true will encrypt all outgoing and incoming request. This enables end-to-end encryption using [Tweetnacl](https://github.com/dchest/tweetnacl-js) and to prevent request interception by browser extensions, network intermediaries or other hijacking tools
      */
     enableE2E_Encryption?: boolean;
     /**
@@ -19,7 +17,7 @@ interface MosquitoDbConfig {
 }
 
 interface GetDatabase {
-    collection: (path: string) => MosquitoDbCollection;
+    collection: (path: string) => MTCollection;
 }
 
 interface mtimestamp { $timestamp: 'now' }
@@ -39,7 +37,7 @@ interface ReleaseCacheOption {
     cacheProtocol?: 'local-storage';
 }
 
-interface MosquitoDbSocket {
+interface MTSocket {
     timeout: (timeout?: number) => ({
         emitWithAck: (...args: any) => Promise<any>;
     });
@@ -57,20 +55,20 @@ interface BatchWriteValue {
     path: string;
 }
 
-export class MosquitoDbClient {
-    constructor(config: MosquitoDbConfig);
+export class MosquitoTransport {
+    constructor(config: MTConfig);
     static releaseCache(option?: ReleaseCacheOption): void;
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
-    collection(path: string): MosquitoDbCollection;
-    auth(): MosquitoDbAuth;
-    storage(): MosquitoDbStorage;
+    collection(path: string): MTCollection;
+    auth(): MTAuth;
+    storage(): MTStorage;
     fetchHttp(endpoint: string, init?: RequestInit, config?: FetchHttpConfig): Promise<Response>;
     listenReachableServer(callback: (reachable: boolean) => void): () => void;
-    getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): MosquitoDbSocket;
+    getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): MTSocket;
     batchWrite(map: BatchWriteValue[], config?: WriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
 
-interface MosquitoDbCollection {
+interface MTCollection {
     find: (find?: DocumentFind) => ({
         get: (config?: GetConfig) => Promise<DocumentResult[]>;
         listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
@@ -132,7 +130,7 @@ interface MosquitoDbCollection {
 
     setOne: (value: DocumentWriteValue, config?: WriteConfig) => Promise<DocumentWriteResult>;
 
-    setMany: (value: DocumentWriteValue, config?: WriteConfig) => Promise<DocumentWriteResult>;
+    setMany: (value: DocumentWriteValue[], config?: WriteConfig) => Promise<DocumentWriteResult>;
 
     updateOne: (find: DocumentFind, value: DocumentWriteValue, config?: WriteConfig) => Promise<DocumentWriteResult>;
 
@@ -163,6 +161,7 @@ interface FetchHttpConfig {
     retrieval?: GetConfig['retrieval'];
     disableAuth?: boolean;
     enableMinimizer?: boolean;
+    rawApproach?: boolean;
 }
 
 type Delievery = 'default' | 'no-cache' | 'no-await' | 'no-await-no-cache' | 'await-no-cache' | 'cache-no-await';
@@ -207,7 +206,7 @@ interface GetConfig {
      * 
      * - no-cache-no-await: we try getting fresh data from server if server is reachable, else we throw an error
      * 
-     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquitodb/docs/reading_data/retrieval
+     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquito-transport/docs/reading_data/retrieval
      */
     retrieval?: Retrieval;
     /**
@@ -216,7 +215,7 @@ interface GetConfig {
      * 
      * @defaults - 0
      * 
-     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquitodb/docs/reading_data/retrieval
+     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquito-transport/docs/reading_data/retrieval
      */
     episode?: 0 | 1;
     /**
@@ -232,7 +231,7 @@ interface GetConfig {
      * 
      * ```js
      * 
-     * const mserver = new RNMosquitoDb({ projectUrl: 'http..', accessKey: '..'});
+     * const mserver = new MosquitoTransport({ projectUrl: 'http..', accessKey: '..'});
      * const minimizedUser = ['james', 'john', 'james', 'john'];
      * const unminimizedUser = ['anthony', 'albert', 'anthony', 'albert'];
      * 
@@ -250,7 +249,7 @@ interface GetConfig {
      * ```
      * defaults to false
      * 
-     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquitodb/docs/reading_data/retrieval
+     * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquito-transport/docs/reading_data/retrieval
      */
     disableMinimizer?: boolean;
 }
@@ -288,7 +287,7 @@ interface DocumentWriteValue {
 
 }
 
-interface MosquitoDbAuth {
+interface MTAuth {
     customSignin: (email: string, password: string) => Promise<SigninResult>;
     customSignup: (email: string, password: string, name?: string, metadata?: Object) => Promise<SigninResult>;
     googleSignin: (token: string) => Promise<SignupResult>;
@@ -308,6 +307,7 @@ interface MosquitoDbAuth {
 interface SigninResult {
     user: AuthData;
     token: string;
+    refreshToken: string;
 }
 
 interface SignupResult extends SigninResult {
@@ -336,7 +336,7 @@ interface ReqOptions {
     awaitServer?: boolean;
 }
 
-interface MosquitoDbStorage {
+interface MTStorage {
     downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void) => () => void;
     uploadFile: (file: Base64String | Blob | Buffer, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;

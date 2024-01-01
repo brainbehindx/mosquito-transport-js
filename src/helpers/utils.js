@@ -38,8 +38,7 @@ export const releaseCacheStore = async (builder) => {
     }
 
     const j = JSON.parse(decryptString(txt || '', cachePassword, cachePassword) || '{}');
-
-    // console.log('mosquitoCache: ', JSON.stringify(j));
+    
     Object.entries(j).forEach(([k, v]) => {
         CacheStore[k] = v;
     });
@@ -99,7 +98,7 @@ export const buildFetchInterface = ({ body, accessKey, authToken, method, uglify
         cache: 'no-cache',
         headers: {
             'Content-type': uglify ? 'text/plain' : 'application/json',
-            'Authorization': `Bearer ${accessKey}`,
+            'Authorization': accessKey,
             ...((authToken && !uglify) ? { 'Mosquito-Token': authToken } : {})
         },
         method: method || 'POST'

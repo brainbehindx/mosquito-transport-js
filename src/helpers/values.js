@@ -1,6 +1,6 @@
 
-export const CACHE_STORAGE_PATH = btoa('mosquitoDbFreezer:__'),
-    DEFAULT_CACHE_PASSWORD = btoa('mosquitoCachePassword:__'),
+export const CACHE_STORAGE_PATH = btoa('MOSQUITO_TRANSPORT_FREEZER'),
+    DEFAULT_CACHE_PASSWORD = btoa('MOSQUITO_TRANSPORT_CACHE_PASSWORD'),
     DEFAULT_DB_NAME = 'DEFAULT_DB',
     DEFAULT_DB_URL = 'mongodb://127.0.0.1:27017',
     DEFAULT_ENCRYPT_IV = '****';

@@ -1,7 +1,7 @@
 {
-  "name": "mosquitodb-js",
+  "name": "mosquito-transport-js",
   "version": "0.2.0",
-  "description": "Javascript web sdk for mosquitodb",
+  "description": "Javascript web sdk for mosquito-transport (https://github.com/deflexable/mosquito-transport)",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -11,10 +11,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BrainBehindx/mosquitodb-js.git"
+    "url": "git+https://github.com/BrainBehindx/mosquito-transport-js.git"
   },
   "keywords": [
-    "mosquitodb",
+    "mosquito-transport",
     "javascript",
     "selfhosted",
     "serverless",
@@ -26,9 +26,9 @@
   "author": "Anthony Onabanjo <deflexable@gmail.com> (https://github.com/deflexable)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/BrainBehindx/mosquitodb-js/issues"
+    "url": "https://github.com/BrainBehindx/mosquito-transport-js/issues"
   },
-  "homepage": "https://github.com/BrainBehindx/mosquitodb-js#readme",
+  "homepage": "https://github.com/BrainBehindx/mosquito-transport-js#readme",
   "dependencies": {
     "@types/crypto-js": "^4.2.1",
     "@types/lodash": "^4.14.194",

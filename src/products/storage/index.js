@@ -4,7 +4,7 @@ import { awaitReachableServer, buildFetchInterface, simplifyError } from "../../
 import { awaitRefreshToken } from "../auth/accessor";
 import { Buffer } from "buffer";
 
-export class MosquitoDbStorage {
+export class MTStorage {
     constructor(config) {
         this.builder = { ...config };
     }
@@ -82,9 +82,9 @@ export class MosquitoDbStorage {
             xhr.setRequestHeader('Authorization', `Bearer ${btoa(accessKey)}`);
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.setRequestHeader('Content-Type', buffer ? 'buffer/upload' : 'text/plain');
-            if (Scoped.AuthJWTToken[projectUrl]) xhr.setRequestHeader('Mosquitodb-Token', Scoped.AuthJWTToken[projectUrl]);
-            xhr.setRequestHeader('Mosquitodb-Destination', destination);
-            if (base64) xhr.setRequestHeader('Mosquitodb-Encoding', 'base64');
+            if (Scoped.AuthJWTToken[projectUrl]) xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);
+            xhr.setRequestHeader('Mosquito-Destination', destination);
+            if (base64) xhr.setRequestHeader('Mosquito-Encoding', 'base64');
             xhr.send(base64 || buffer);
         })();
 
