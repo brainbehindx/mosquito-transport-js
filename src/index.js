@@ -201,9 +201,9 @@ export class MosquitoTransport {
                         ugly: uglify,
                         a_extras: authHandshake,
                         accessKey
-                    },
-                    transports: ['websocket', 'polling', 'flashsocket']
-                }
+                    }
+                },
+                transports: ['websocket', 'polling', 'flashsocket']
             });
             clientPrivateKey = privateKey;
 
