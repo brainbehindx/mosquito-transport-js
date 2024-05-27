@@ -111,7 +111,7 @@ const {
 } = EngineApi;
 
 const listenDocument = (callback, onError, builder, config) => {
-    const { projectUrl, serverE2E_PublicKey, baseUrl, dbUrl, dbName, accessKey, path, disableCache, command, uglify } = builder,
+    const { projectUrl, wsPrefix, serverE2E_PublicKey, baseUrl, dbUrl, dbName, accessKey, path, disableCache, command, uglify } = builder,
         { find, findOne, sort, direction, limit } = command,
         { disableAuth } = config || {},
         accessId = generateRecordID(builder, config),
@@ -163,7 +163,7 @@ const listenDocument = (callback, onError, builder, config) => {
 
         const [encPlate, [privateKey]] = uglify ? serializeE2E({ accessKey, _body: authObj }, mtoken, serverE2E_PublicKey) : ['', []];
 
-        socket = io(`ws://${baseUrl}`, {
+        socket = io(`${wsPrefix}://${baseUrl}`, {
             auth: uglify ? { e2e: encPlate, _m_internal: true } : {
                 accessKey,
                 _body: authObj,
@@ -188,7 +188,7 @@ const listenDocument = (callback, onError, builder, config) => {
         });
 
         socket.on('connect', () => {
-            if (wasDisconnected) socket.emit(findOne ? '_listenDocument' : '_listenCollection');
+            if (wasDisconnected) socket.emit((findOne ? _listenDocument : _listenCollection)(uglify));
         });
 
         socket.on('disconnect', () => {
@@ -218,7 +218,7 @@ const listenDocument = (callback, onError, builder, config) => {
 }
 
 const initOnDisconnectionTask = (builder, value, type) => {
-    const { projectUrl, baseUrl, serverE2E_PublicKey, dbUrl, dbName, accessKey, path, command, uglify } = builder,
+    const { projectUrl, wsPrefix, baseUrl, serverE2E_PublicKey, dbUrl, dbName, accessKey, path, command, uglify } = builder,
         { find } = command || {},
         disableAuth = false;
 
@@ -241,7 +241,7 @@ const initOnDisconnectionTask = (builder, value, type) => {
                 dbUrl
             };
 
-        socket = io(`ws://${baseUrl}`, {
+        socket = io(`${wsPrefix}://${baseUrl}`, {
             auth: uglify ? {
                 e2e: serializeE2E(authObj, mtoken, serverE2E_PublicKey)[0],
                 _m_internal: true

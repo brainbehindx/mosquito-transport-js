@@ -1,4 +1,5 @@
 import EngineApi from "../../helpers/EngineApi";
+import { encodeBinary } from "../../helpers/peripherals";
 import { Scoped } from "../../helpers/variables";
 import { awaitReachableServer, buildFetchInterface, simplifyError } from "../../helpers/utils";
 import { awaitRefreshToken } from "../auth/accessor";
@@ -79,7 +80,7 @@ export class MTStorage {
                 hasFinished = true;
                 onComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
             });
-            xhr.setRequestHeader('Authorization', `Bearer ${btoa(accessKey)}`);
+            xhr.setRequestHeader('Authorization', `Bearer ${encodeBinary(accessKey)}`);
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.setRequestHeader('Content-Type', buffer ? 'buffer/upload' : 'text/plain');
             if (Scoped.AuthJWTToken[projectUrl]) xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);

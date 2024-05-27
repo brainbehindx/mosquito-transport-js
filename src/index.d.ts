@@ -55,6 +55,10 @@ interface BatchWriteValue {
     path: string;
 }
 
+interface BatchWriteConfig extends WriteConfig {
+    stepping?: boolean;
+}
+
 export class MosquitoTransport {
     constructor(config: MTConfig);
     static releaseCache(option?: ReleaseCacheOption): void;
@@ -65,7 +69,7 @@ export class MosquitoTransport {
     fetchHttp(endpoint: string, init?: RequestInit, config?: FetchHttpConfig): Promise<Response>;
     listenReachableServer(callback: (reachable: boolean) => void): () => void;
     getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): MTSocket;
-    batchWrite(map: BatchWriteValue[], config?: WriteConfig): Promise<DocumentWriteResult[] | undefined>;
+    batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
 
 interface MTCollection {

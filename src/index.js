@@ -34,7 +34,9 @@ export class MosquitoTransport {
         };
         const { projectUrl } = this.config;
 
+        this.config.secureUrl = projectUrl.startsWith('https');
         this.config.baseUrl = projectUrl.split('://')[1];
+        this.config.wsPrefix = this.config.secureUrl ? 'wss' : 'ws';
 
         if (!Scoped.ReleaseCacheData)
             throw `releaseCache must be called before creating any ${this.constructor.name} instance`;
@@ -45,9 +47,13 @@ export class MosquitoTransport {
             triggerAuthToken(projectUrl);
             initTokenRefresher({ ...this.config }, true);
 
-            const socket = io(`ws://${projectUrl.split('://')[1]}`, {
+            const socket = io(`${this.config.wsPrefix}://${projectUrl.split('://')[1]}`, {
                 transports: ['websocket', 'polling', 'flashsocket'],
-                auth: { _m_internal: true }
+                auth: { _m_internal: true, _from_base: true }
+            });
+
+            socket.on('_signal_signout', () => {
+                this.auth().signOut();
             });
 
             socket.on('connect', () => {
@@ -69,7 +75,7 @@ export class MosquitoTransport {
     }
 
     static releaseCache(prop) {
-        if (Scoped.ReleaseCacheData) throw `calling ${this.name} multiple times is prohibited`;
+        if (Scoped.ReleaseCacheData) throw `calling ${this.name}() multiple times is prohibited`;
         validateReleaseCacheProp({ ...prop });
         Scoped.ReleaseCacheData = { ...prop };
         releaseCacheStore({ ...prop });
@@ -95,7 +101,7 @@ export class MosquitoTransport {
 
     getSocket = (configOpts) => {
         const { disableAuth, authHandshake } = configOpts || {},
-            { projectUrl, uglify, accessKey, serverE2E_PublicKey } = this.config;
+            { projectUrl, uglify, accessKey, serverE2E_PublicKey, wsPrefix } = this.config;
 
         const restrictedRoute = [
             _listenCollection,
@@ -126,7 +132,7 @@ export class MosquitoTransport {
                 res = parse(deserializeE2E(args, serverE2E_PublicKey, clientPrivateKey));
             } else res = args;
 
-            callback?.(...res || [], ...typeof restArgs === 'function' ? [function () {
+            callback?.(...res || [], ...typeof restArgs[0] === 'function' ? [function () {
                 const args = [...arguments];
                 let res;
 
@@ -134,7 +140,7 @@ export class MosquitoTransport {
                     res = serializeE2E(stringify(args), undefined, serverE2E_PublicKey)[0];
                 } else res = args;
 
-                restArgs(res);
+                restArgs[0](res);
             }] : []);
         }
 
@@ -162,25 +168,28 @@ export class MosquitoTransport {
                 const h = isNaN(timeout) ? socket : socket.timeout(timeout - (Date.now() - stime));
 
                 const lastEmit = emittion.slice(-1)[0],
-                    mit = typeof lastEmit === 'function' ? emittion.slice(0, emittion.length - 1) : emittion;
+                    mit = typeof lastEmit === 'function' ? emittion.slice(0, -1) : emittion;
 
                 const [reqBuilder, [privateKey]] = uglify ? serializeE2E(stringify(mit), undefined, serverE2E_PublicKey) : [undefined, []];
+
+                if (typeof lastEmit === 'function' && promise)
+                    throw 'emitWithAck cannot have function in it parameter';
 
                 const p = await h[promise ? 'emitWithAck' : 'emit'](route,
                     ...uglify ? [reqBuilder] : [mit],
                     ...typeof lastEmit === 'function' ? [function () {
-                        const args = [...arguments];
+                        const args = [...arguments][0];
                         let res;
 
                         if (uglify) {
-                            res = parse(deserializeE2E(args[0], serverE2E_PublicKey, privateKey));
+                            res = parse(deserializeE2E(args, serverE2E_PublicKey, privateKey));
                         } else res = args;
 
                         lastEmit(...res || []);
                     }] : []
                 );
 
-                resolve(promise ? parse(deserializeE2E(p, serverE2E_PublicKey, privateKey))[0] : undefined);
+                resolve((promise && p) ? uglify ? parse(deserializeE2E(p, serverE2E_PublicKey, privateKey))[0] : p[0] : undefined);
             } catch (e) {
                 reject(e);
             }
@@ -191,19 +200,16 @@ export class MosquitoTransport {
             const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
             const [reqBuilder, [privateKey]] = uglify ? serializeE2E({ accessKey, a_extras: authHandshake }, mtoken, serverE2E_PublicKey) : [null, []];
 
-            socket = io(`ws://${projectUrl.split('://')[1]}`, {
-                auth: {
-                    ...uglify ? {
-                        ugly: true,
-                        e2e: reqBuilder
-                    } : {
-                        ...mtoken ? { mtoken } : {},
-                        ugly: uglify,
-                        a_extras: authHandshake,
-                        accessKey
-                    }
-                },
-                transports: ['websocket', 'polling', 'flashsocket']
+            socket = io(`${wsPrefix}://${projectUrl.split('://')[1]}`, {
+                transports: ['websocket', 'polling', 'flashsocket'],
+                auth: uglify ? {
+                    ugly: true,
+                    e2e: reqBuilder
+                } : {
+                    ...mtoken ? { mtoken } : {},
+                    a_extras: authHandshake,
+                    accessKey
+                }
             });
             clientPrivateKey = privateKey;
 
