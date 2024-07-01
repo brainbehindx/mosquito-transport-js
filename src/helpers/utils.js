@@ -7,7 +7,8 @@ export const updateCacheStore = () => {
     try { window } catch (_) { return; }
     const {
         cachePassword = DEFAULT_CACHE_PASSWORD,
-        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE
+        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE,
+        io
     } = Scoped.ReleaseCacheData;
 
     clearTimeout(Scoped.cacheStorageReducer);
@@ -18,7 +19,9 @@ export const updateCacheStore = () => {
             cachePassword
         );
 
-        if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
+        if (io) {
+            io.ouput(txt);
+        } else if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
             window.localStorage.setItem(CACHE_STORAGE_PATH, txt);
         }
     }, 500);
@@ -28,17 +31,20 @@ export const releaseCacheStore = async (builder) => {
     try { window } catch (_) { return; }
     const {
         cachePassword = DEFAULT_CACHE_PASSWORD,
-        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE
+        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE,
+        io
     } = builder;
 
     let txt;
 
-    if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
+    if (io) {
+        txt = await io.input();
+    } else if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
         txt = window.localStorage.getItem(CACHE_STORAGE_PATH);
     }
 
     const j = JSON.parse(decryptString(txt || '', cachePassword, cachePassword) || '{}');
-    
+
     Object.entries(j).forEach(([k, v]) => {
         CacheStore[k] = v;
     });

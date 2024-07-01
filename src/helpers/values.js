@@ -37,8 +37,8 @@ export const WRITE_OPS = {
     $MAX: '$max',
     $MIN: '$min',
     $MUL: '$mul',
-    $RENAME: '$rename'
-    // $SET_ON_INSERT: '$setOnInsert'
+    $RENAME: '$rename',
+    $SET_ON_INSERT: '$setOnInsert'
 };
 export const WRITE_OPS_LIST = Object.values(WRITE_OPS);
 
