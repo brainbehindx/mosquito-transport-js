@@ -37,7 +37,7 @@
     "lodash": "^4.17.21",
     "set-large-timeout": "^1.0.1",
     "socket.io-client": "^4.6.2",
-    "subscription-listener": "^1.1.1",
+    "subscription-listener": "^1.1.2",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
