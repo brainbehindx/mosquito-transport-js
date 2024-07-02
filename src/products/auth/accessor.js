@@ -15,6 +15,7 @@ export const listenToken = (callback, projectUrl) =>
 export const injectFreshToken = async (config, { token, refreshToken }) => {
     const { projectUrl } = config;
 
+    await awaitStore();
     CacheStore.AuthStore[projectUrl] = { token, refreshToken };
     Scoped.AuthJWTToken[projectUrl] = token;
     updateCacheStore();

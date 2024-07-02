@@ -1,6 +1,6 @@
 {
   "name": "mosquito-transport-js",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Javascript web sdk for mosquito-transport (https://github.com/deflexable/mosquito-transport)",
   "main": "src/index.js",
   "type": "module",
@@ -10,7 +10,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/BrainBehindx/mosquito-transport-js.git"
+    "url": "git+https://github.com/brainbehindx/mosquito-transport-js.git"
   },
   "keywords": [
     "mosquito-transport",
@@ -25,9 +25,9 @@
   "author": "Anthony Onabanjo <deflexable@gmail.com> (https://github.com/deflexable)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/BrainBehindx/mosquito-transport-js/issues"
+    "url": "https://github.com/brainbehindx/mosquito-transport-js/issues"
   },
-  "homepage": "https://github.com/BrainBehindx/mosquito-transport-js#readme",
+  "homepage": "https://github.com/brainbehindx/mosquito-transport-js#readme",
   "dependencies": {
     "@types/crypto-js": "^4.2.1",
     "@types/lodash": "^4.14.194",

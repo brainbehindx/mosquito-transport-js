@@ -5,6 +5,7 @@ export const Scoped = {
     IS_TOKEN_READY: {},
     InitializedProject: {},
     ReleaseCacheData: undefined,
+    IsStoreReady: false,
     AuthJWTToken: {},
     cacheStorageReducer: undefined,
     TokenRefreshTimer: {},
