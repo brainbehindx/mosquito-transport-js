@@ -5,12 +5,12 @@ import { MTAuth } from "./products/auth";
 import { MTCollection, batchWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener, TokenRefreshListener } from "./helpers/listeners";
-import { initTokenRefresher, listenTokenReady, triggerAuthToken } from "./products/auth/accessor";
+import { initTokenRefresher, listenToken, listenTokenReady, parseToken, triggerAuthToken } from "./products/auth/accessor";
 import { TIMESTAMP, DOCUMENT_EXTRACTION, FIND_GEO_JSON, GEO_JSON } from "./products/database/types";
 import { mfetch } from "./products/http_callable";
 import { io } from "socket.io-client";
 import { validateCollectionPath } from "./products/database/validator";
-import { CACHE_PROTOCOL, Regexs } from "./helpers/values";
+import { AUTH_PROVIDER_ID, CACHE_PROTOCOL, Regexs } from "./helpers/values";
 import { trySendPendingWrite } from "./products/database/accessor";
 import EngineApi from './helpers/EngineApi';
 import { parse, stringify } from 'json-buffer';
@@ -47,21 +47,42 @@ export class MosquitoTransport {
             triggerAuthToken(projectUrl);
             initTokenRefresher({ ...this.config }, true);
 
-            const socket = io(`${this.config.wsPrefix}://${projectUrl.split('://')[1]}`, {
-                transports: ['websocket', 'polling', 'flashsocket'],
-                auth: { _m_internal: true, _from_base: true }
-            });
+            const disconnectionGlich = {};
+            let socket, lastUid, lastSocketProcess = 0, hasInited;
 
-            socket.on('_signal_signout', () => {
-                this.auth().signOut();
-            });
+            listenToken((token, thisInited) => {
+                const user = token && parseToken(token);
 
-            socket.on('connect', () => {
-                ServerReachableListener.dispatch(projectUrl, true);
-            });
-            socket.on('disconnect', () => {
-                ServerReachableListener.dispatch(projectUrl, false);
-            });
+                const thisUid = (user?.uid || null);
+                if (lastUid === thisUid && (hasInited || !thisInited)) return;
+                if (!hasInited) hasInited = thisInited;
+                lastUid = thisUid;
+
+                if (lastSocketProcess) disconnectionGlich[lastSocketProcess] = true;
+                socket.close();
+
+                const thisProcess = ++lastSocketProcess;
+                socket = io(`${this.config.wsPrefix}://${projectUrl.split('://')[1]}`, {
+                    transports: ['websocket', 'polling', 'flashsocket'],
+                    auth: {
+                        _m_internal: true,
+                        _from_base: true,
+                        atoken: token
+                    }
+                });
+
+                socket.on('_signal_signout', () => {
+                    this.auth().signOut();
+                });
+
+                socket.on('connect', () => {
+                    ServerReachableListener.dispatch(projectUrl, true);
+                });
+                socket.on('disconnect', () => {
+                    if (!disconnectionGlich[thisProcess])
+                        ServerReachableListener.dispatch(projectUrl, false);
+                });
+            }, projectUrl);
 
             listenReachableServer(c => {
                 Scoped.IS_CONNECTED[projectUrl] = c;
@@ -379,5 +400,6 @@ export {
     TIMESTAMP,
     DOCUMENT_EXTRACTION,
     FIND_GEO_JSON,
-    GEO_JSON
+    GEO_JSON,
+    AUTH_PROVIDER_ID
 };
