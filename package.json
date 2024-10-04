@@ -33,7 +33,7 @@
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
     "fast-json-stable-stringify": "^2.1.0",
-    "guard-object": "^1.0.7",
+    "guard-object": "^1.0.9",
     "json-buffer": "^3.0.1",
     "lodash.get": "^4.4.2",
     "lodash.isequal": "^4.5.0",
