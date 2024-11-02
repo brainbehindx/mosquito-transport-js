@@ -2,19 +2,31 @@ import { ServerReachableListener, StoreReadyListener } from "./listeners";
 import { CACHE_PROTOCOL, CACHE_STORAGE_PATH, DEFAULT_CACHE_PASSWORD } from "./values";
 import { CacheStore, Scoped } from "./variables";
 import { decryptString, encryptString, serializeE2E } from "./peripherals";
+import { deserializeBSON, serializeToBase64 } from "../products/database/bson";
+import { trySendPendingWrite } from "../products/database";
 
-export const updateCacheStore = () => {
+export const updateCacheStore = (timer = 300) => {
     try { window } catch (_) { return; }
     const {
         cachePassword = DEFAULT_CACHE_PASSWORD,
         cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE,
-        io
+        io,
+        promoteCache
     } = Scoped.ReleaseCacheData;
 
     clearTimeout(Scoped.cacheStorageReducer);
     Scoped.cacheStorageReducer = setTimeout(() => {
+        const { AuthStore, DatabaseStore, PendingWrites, ...restStore } = CacheStore;
+
         const txt = encryptString(
-            JSON.stringify({ ...CacheStore }),
+            JSON.stringify({
+                AuthStore,
+                ...promoteCache ? {
+                    DatabaseStore: serializeToBase64(DatabaseStore),
+                    PendingWrites: serializeToBase64(PendingWrites)
+                } : {},
+                ...promoteCache ? restStore : {}
+            }),
             cachePassword,
             cachePassword
         );
@@ -24,8 +36,8 @@ export const updateCacheStore = () => {
         } else if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
             window.localStorage.setItem(CACHE_STORAGE_PATH, txt);
         }
-    }, 500);
-}
+    }, timer);
+};
 
 export const releaseCacheStore = async (builder) => {
     try { window } catch (_) { return; }
@@ -44,17 +56,26 @@ export const releaseCacheStore = async (builder) => {
     }
 
     const j = JSON.parse(decryptString(txt || '', cachePassword, cachePassword) || '{}');
+    const projectList = new Set([]);
 
     Object.entries(j).forEach(([k, v]) => {
-        CacheStore[k] = v;
+        if (['DatabaseStore', 'PendingWrites'].includes(k)) {
+            CacheStore[k] = deserializeBSON(v);
+        } else CacheStore[k] = v;
+        projectList.add(k);
     });
     Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
         Scoped.AuthJWTToken[key] = value?.token;
     });
+    projectList.forEach(projectUrl => {
+        if (Scoped.IS_CONNECTED[projectUrl])
+            trySendPendingWrite(projectUrl);
+    });
     Scoped.IsStoreReady = true;
     StoreReadyListener.dispatch('_', 'ready');
-    // TODO: commit pending write
-}
+};
+
+export const getPrefferTime = () => Date.now() + (Scoped.serverTimeOffset || 0);
 
 export const awaitStore = () => new Promise(resolve => {
     if (Scoped.IsStoreReady) {
@@ -110,11 +131,3 @@ export const buildFetchInterface = ({ body, accessKey, authToken, method, uglify
         method: method || 'POST'
     }, keyPair];
 };
-
-export const simplifyError = (error, message) => ({
-    simpleError: { error, message }
-});
-
-export const validateRequestMethod = (method) => {
-    // TODO:
-}

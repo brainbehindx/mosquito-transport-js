@@ -1,10 +1,7 @@
 import { encodeBinary } from './peripherals';
 
 export const CACHE_STORAGE_PATH = encodeBinary('MOSQUITO_TRANSPORT_FREEZER'),
-    DEFAULT_CACHE_PASSWORD = encodeBinary('MOSQUITO_TRANSPORT_CACHE_PASSWORD'),
-    DEFAULT_DB_NAME = 'DEFAULT_DB',
-    DEFAULT_DB_URL = 'mongodb://127.0.0.1:27017',
-    DEFAULT_ENCRYPT_IV = '****';
+    DEFAULT_CACHE_PASSWORD = encodeBinary('MOSQUITO_TRANSPORT_CACHE_PASSWORD');
 
 export const CACHE_PROTOCOL = {
     LOCAL_STORAGE: 'local-storage'
@@ -16,7 +13,8 @@ export const RETRIEVAL = {
     STICKY_RELOAD: 'sticky-reload',
     DEFAULT: 'default',
     CACHE_NO_AWAIT: 'cache-no-await',
-    NO_CACHE_NO_AWAIT: 'no-cache-no-await'
+    NO_CACHE_NO_AWAIT: 'no-cache-no-await',
+    NO_CACHE_AWAIT: 'no-cache-await'
 };
 
 export const DELIVERY = {
@@ -26,43 +24,6 @@ export const DELIVERY = {
     NO_AWAIT_NO_CACHE: 'no-await-no-cache',
     AWAIT_NO_CACHE: 'await-no-cache',
     CACHE_NO_AWAIT: 'cache-no-await'
-};
-
-export const WRITE_OPS = {
-    $SET: '$set',
-    $PUSH: '$push',
-    $PULL: '$pull',
-    $UNSET: '$unset',
-    $INC: '$inc',
-    $MAX: '$max',
-    $MIN: '$min',
-    $MUL: '$mul',
-    $RENAME: '$rename',
-    $SET_ON_INSERT: '$setOnInsert'
-};
-export const WRITE_OPS_LIST = Object.values(WRITE_OPS);
-
-export const READ_OPS = {
-    $IN: '$in',
-    $ALL: '$all',
-    $NIN: '$nin',
-    $GT: '$gt',
-    $GTE: '$gte',
-    $LT: '$lt',
-    $LTE: '$lte',
-    $TEXT: '$text',
-    // $EQ: '$eq',
-    // $REGEX: '$regex',
-    // $EXISTS: '$exists',
-    $NEAR: '$near',
-    $TYPE: '$type',
-    $SIZE: '$size',
-    // $NE: '$ne'
-};
-export const READ_OPS_LIST = Object.values(READ_OPS);
-
-export const Regexs = {
-    LINK: () => /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig
 };
 
 export const AUTH_PROVIDER_ID = {

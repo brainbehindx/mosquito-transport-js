@@ -1,10 +1,12 @@
 interface MTConfig {
     dbName?: string;
     dbUrl?: string;
-    heapMemory?: number;
     projectUrl: string;
     disableCache?: boolean;
     accessKey: string;
+    /**
+     * maximum numbers of attempts to retry sending a request
+     */
     maxRetries?: number;
     /**
      * setting this to true will encrypt all outgoing and incoming request. This enables end-to-end encryption using [Tweetnacl](https://github.com/dchest/tweetnacl-js) and to prevent request interception by browser extensions, network intermediaries or other hijacking tools
@@ -14,6 +16,12 @@ interface MTConfig {
      * this is the base64 public key for end-to-end encryption on the server
      */
     serverE2E_PublicKey?: string;
+    /**
+     * true to deserialize BSON values to their Node.js closest equivalent types
+     * 
+     * @default true
+     */
+    castBSON?: boolean;
 }
 
 interface GetDatabase {
@@ -34,7 +42,7 @@ export function GEO_JSON(latitude: latitude, longitude: longitude): {
 };
 
 export function FIND_GEO_JSON(coordinates: [latitude, longitude], offSetMeters: number, centerMeters?: number): {
-    $near: {
+    $nearSphere: {
         $geometry: {
             type: "Point",
             coordinates: [longitude, latitude]
@@ -76,7 +84,7 @@ interface ReleaseCacheOption_IO {
          * emits mosquito-transport internal data
          */
         output: (data: string) => void;
-    }
+    };
 }
 
 interface ReleaseCacheOption {
@@ -88,7 +96,18 @@ interface ReleaseCacheOption {
      * select the mechanism for storing data locally
      * - local-storage: uses [@react-native-async-storage/async-storage]() for storing data
      */
-    cacheProtocol?: 'local-storage';
+    cacheProtocol?: 'local-storage' | 'indexdb';
+    /**
+     * the maximum database size
+     */
+    heapMemory?: number;
+    /**
+     * true to cache database and {@link MosquitoTransport.fetchHttp} data.
+     * the value only applies to in-memory storage protocol such as `io` and `local-storage`
+     * 
+     * @default false
+     */
+    promoteCache?: boolean;
 }
 
 interface MTSocket {
@@ -243,7 +262,7 @@ interface WriteConfig {
     delivery?: Delievery;
 }
 
-type Retrieval = 'sticky' | 'sticky-no-await' | 'sticky-reload' | 'default' | 'cache-no-await' | 'no-cache-no-await';
+type Retrieval = 'sticky' | 'sticky-no-await' | 'sticky-reload' | 'default' | 'cache-no-await' | 'no-cache-no-await' | 'no-cache-await';
 
 interface GetConfig {
     excludeFields?: string | string[];
@@ -252,17 +271,19 @@ interface GetConfig {
     /**
      * This property determines how requested data is being access and handled
      * 
-     * - default: we try getting fresh data from server if server is reachable, else we check if local data exists and return it, if no local data exist we await for client->server connectivity, then try getting the data, return it and cache it for future need. ⚠️ This respect disableCache value
+     * - default: will try getting fresh data from server if server is reachable, else we check if local data exists and return it, if no local data exist we await for client->server connectivity, then try getting the data, return it and cache it for future need. ⚠️ This respect disableCache value
      * 
      * - sticky: if local data exists for the specified query, such data is returned and no-ops afterwards. If no local data is found, we await for client->server connectivity and try to get fresh data from serve, return the data and cache it for future need. ⚠️ This does not respect disableCache value
      * 
-     * - sticky-no-await: if local data exists for the specified query, such data is returned and no-ops afterwards. If no local data is found, we try to get fresh data from serve, we throw an error if server is not reachable else if server returns requested data, we return such data and cache it for future need. ⚠️ This does not respect disableCache value
+     * - sticky-no-await: if local data exists for the specified query, such data is returned and no-ops afterwards. If no local data is found, will try to get fresh data from serve, we throw an error if server is not reachable else if server returns requested data, we return such data and cache it for future need. ⚠️ This does not respect disableCache value
      * 
-     * - sticky-reload: if local data exists for the specified query, such data is returned, then we try getting fresh data from the server and caching it for future need. If no local data is found, we await for client->server connectivity and try to get fresh data from serve, return the data and cache it for future need
+     * - sticky-reload: if local data exists for the specified query, such data is returned, then will try getting fresh data from the server and caching it for future need. If no local data is found, we await for client->server connectivity and try to get fresh data from serve, return the data and cache it for future need
      * 
-     * - cache-no-await: we try getting fresh data from server if server is reachable, else we check if local data exists and return it, if no local data exist we throw an error
+     * - cache-no-await: will try getting fresh data from server if server is reachable, else we check if local data exists and return it, if no local data exist we throw an error
      * 
-     * - no-cache-no-await: we try getting fresh data from server if server is reachable, else we throw an error
+     * - no-cache-no-await: will try getting fresh data from server if server is reachable, else we throw an error
+     * 
+     * - no-cache-await: will try getting fresh data from server when server is reachable and the result won't be cache
      * 
      * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquito-transport/docs/reading_data/retrieval
      */
@@ -417,11 +438,12 @@ declare type Base64String = string;
 
 interface ReqOptions {
     awaitServer?: boolean;
+    createHash?: boolean;
 }
 
 interface MTStorage {
     downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void) => () => void;
-    uploadFile: (file: Base64String | Blob | Buffer, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
+    uploadFile: (file: Base64String | Blob | Buffer | File, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;
     deleteFolder: (folder: string) => Promise<void>;
 }

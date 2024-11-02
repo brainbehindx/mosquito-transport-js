@@ -1,4 +1,4 @@
-import EngineApi from "../../helpers/EngineApi";
+import EngineApi from "../../helpers/engine_api";
 import { encodeBinary } from "../../helpers/peripherals";
 import { Scoped } from "../../helpers/variables";
 import { awaitReachableServer, buildFetchInterface, simplifyError } from "../../helpers/utils";
@@ -11,25 +11,19 @@ export class MTStorage {
     }
 
     uploadFile = (file, destination, onComplete, onProgress, reqOptions) => {
-        let hasCancelled = false, hasFinished = false, xhr;
+        let hasCancelled = false,
+            hasFinished = false,
+            xhr;
 
         (async () => {
-            let base64, buffer;
+            let fileStream, buffer;
 
             if (Buffer.isBuffer(file)) {
                 buffer = file;
-            } else if (file instanceof Blob) {
-                try {
-                    buffer = await file.arrayBuffer();
-                } catch (e) {
-                    onComplete?.({
-                        error: 'invalid_blob',
-                        message: `uploadFile() first argument has an invalid blob ${e}`
-                    });
-                    return;
-                }
-            } else if (typeof file === 'string' && file?.trim()) {
-                base64 = file.replace(/^data:\w+\/\w+;base64,/, '');
+            } else if ((file instanceof File) || (file instanceof Blob)) {
+                fileStream = file;
+            } else if (typeof file === 'string' && file.trim()) {
+                buffer = Buffer.from(file.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
             } else {
                 onComplete?.({
                     error: 'file_path_invalid',
@@ -38,23 +32,23 @@ export class MTStorage {
                 return;
             }
             if (hasCancelled) return;
-            destination = destination?.trim();
+            destination = destination?.trim?.();
 
-            const destErr = validateDestination(destination);
-
-            if (destErr) {
-                onComplete?.({ error: 'destination_invalid', message: destErr });
-                return;
+            try {
+                validateDestination(destination);
+            } catch (error) {
+                onComplete?.({ error: 'destination_invalid', message: error });
+                return () => { };
             }
 
-            const { projectUrl, accessKey } = this.builder;
+            const { projectUrl, accessKey, uglify } = this.builder;
             xhr = new XMLHttpRequest();
-            const { awaitServer } = reqOptions || {};
+            const { awaitServer, createHash } = reqOptions || {};
 
             if (awaitServer) await awaitReachableServer(projectUrl);
             await awaitRefreshToken(projectUrl);
 
-            xhr.open('POST', EngineApi._uploadFile(projectUrl), true);
+            xhr.open('POST', EngineApi._uploadFile(projectUrl, uglify), true);
             xhr.upload.addEventListener('progress', e => {
                 onProgress?.({ sentBtyes: e.loaded, totalBytes: e.total });
             });
@@ -82,11 +76,12 @@ export class MTStorage {
             });
             xhr.setRequestHeader('Authorization', `Bearer ${encodeBinary(accessKey)}`);
             xhr.setRequestHeader('Accept', 'application/json');
-            xhr.setRequestHeader('Content-Type', buffer ? 'buffer/upload' : 'text/plain');
-            if (Scoped.AuthJWTToken[projectUrl]) xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);
+            xhr.setRequestHeader('Content-Type', 'buffer/upload');
+            if (Scoped.AuthJWTToken[projectUrl])
+                xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);
+            if (createHash) xhr.setRequestHeader('hash-upload', 'yes');
             xhr.setRequestHeader('Mosquito-Destination', destination);
-            if (base64) xhr.setRequestHeader('Mosquito-Encoding', 'base64');
-            xhr.send(base64 || buffer);
+            xhr.send(fileStream || buffer);
         })();
 
         return () => {
@@ -104,11 +99,11 @@ export class MTStorage {
 }
 
 const deleteContent = async (builder, path, isFolder) => {
-    const { projectUrl, accessKey } = builder;
+    const { projectUrl, accessKey, uglify } = builder;
 
     try {
         const r = await (await fetch(
-            EngineApi[isFolder ? '_deleteFolder' : '_deleteFile'](projectUrl),
+            EngineApi[isFolder ? '_deleteFolder' : '_deleteFile'](projectUrl, uglify),
             buildFetchInterface({ path }, accessKey, Scoped.AuthJWTToken[projectUrl], 'DELETE')
         )).json();
         if (r.simpleError) throw r;
@@ -117,19 +112,21 @@ const deleteContent = async (builder, path, isFolder) => {
         if (e?.simpleError) throw e.simpleError;
         throw simplifyError('unexpected_error', `${e}`).simpleError;
     }
-}
+};
 
 const validateDestination = (t = '') => {
-    t = t.trim();
+    if (typeof t !== 'string' || !t.trim()) throw 'path must be a non-empty string';
+    if (t.startsWith(' ') || t.endsWith(' ')) throw 'path must be trimmed';
+    if (t.startsWith('./') || t.startsWith('../')) throw 'path must be absolute';
+    if (t.endsWith('/')) throw 'path must not end with "/"';
+    if ('?'.split('').some(v => t.includes(v)))
+        throw `path must not contain ?`;
 
-    if (!t || typeof t !== 'string') return `destination is required`;
-    if (t.startsWith('/') || t.endsWith('/')) return 'destination must neither start with "/" nor end with "/"';
-    let l = '', r;
+    t = t.trim();
+    let l = '';
 
     t.split('').forEach(e => {
-        if (e === '/' && l === '/') r = 'invalid destination path, "/" cannot be side by side';
+        if (e === '/' && l === '/') throw 'invalid destination path, "/" cannot be duplicated side by side';
         l = e;
     });
-
-    return r;
 };
