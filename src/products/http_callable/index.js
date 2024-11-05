@@ -60,7 +60,7 @@ export const mfetch = async (input = '', init, config) => {
 
     if (input.startsWith(projectUrl) && !rawApproach)
         throw `please set { rawApproach: true } if you're trying to access different endpoint at "${input}"`;
-
+    // TODO: add File and ArrayBuffer and blob
     if (body !== undefined && typeof body !== 'string')
         throw `"body" must be a string value`;
 

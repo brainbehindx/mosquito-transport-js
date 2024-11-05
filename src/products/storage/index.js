@@ -1,9 +1,10 @@
 import EngineApi from "../../helpers/engine_api";
 import { encodeBinary } from "../../helpers/peripherals";
 import { Scoped } from "../../helpers/variables";
-import { awaitReachableServer, buildFetchInterface, simplifyError } from "../../helpers/utils";
+import { awaitReachableServer, buildFetchInterface } from "../../helpers/utils";
 import { awaitRefreshToken } from "../auth/accessor";
 import { Buffer } from "buffer";
+import { simplifyError } from "simplify-error";
 
 export class MTStorage {
     constructor(config) {
