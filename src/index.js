@@ -24,6 +24,16 @@ const {
     _listenUserVerification
 } = EngineApi;
 
+// https://socket.io/docs/v3/emit-cheatsheet/#reserved-events
+const reservedEventName = [
+    'connect',
+    'connect_error',
+    'disconnect',
+    'disconnecting',
+    'newListener',
+    'removeListener'
+];
+
 export class MosquitoTransport {
     constructor(config) {
         validateMTConfig(config, this);
@@ -166,7 +176,12 @@ export class MosquitoTransport {
             tokenListener,
             clientPrivateKey;
 
-        const listenerCallback = (callback) => function () {
+        const listenerCallback = (route, callback) => function () {
+            if (reservedEventName.includes(route)) {
+                callback?.(...[...arguments]);
+                return;
+            }
+
             const [args, emitable] = [...arguments];
             let res;
 
@@ -307,7 +322,7 @@ export class MosquitoTransport {
                 if (restrictedRoute.includes(route))
                     throw `${route} is a restricted socket path, avoid using any of ${restrictedRoute}`;
                 const ref = ++socketListenerIte,
-                    listener = listenerCallback(callback);
+                    listener = listenerCallback(route, callback);
 
                 socketListenerList.push([ref, 'on', route, listener]);
                 if (socket) socket.on(route, listener);
@@ -321,7 +336,7 @@ export class MosquitoTransport {
                 if (restrictedRoute.includes(route))
                     throw `${route} is a restricted socket path, avoid using any of ${restrictedRoute}`;
                 const ref = ++socketListenerIte,
-                    listener = listenerCallback(callback);
+                    listener = listenerCallback(route, callback);
 
                 socketListenerList.push([ref, 'once', route, listener]);
                 if (socket) socket.once(route, listener);
