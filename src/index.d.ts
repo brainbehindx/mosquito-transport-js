@@ -115,7 +115,7 @@ interface MTSocket {
         emitWithAck: (...args: any) => Promise<any>;
     });
     emit: (...args: any) => void;
-    emitWithAck: () => Promise<any>;
+    emitWithAck: (...args: any) => Promise<any>;
     on: (route: string, callback?: () => any) => void;
     once: (route: string, callback?: () => any) => void;
     destroy: () => void;

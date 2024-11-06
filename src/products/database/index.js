@@ -197,7 +197,7 @@ const listenDocument = (callback, onError, builder, config) => {
             dbUrl
         };
 
-        const [encPlate, [privateKey]] = uglify ? serializeE2E({ accessKey, _body: authObj }, mtoken, serverE2E_PublicKey) : ['', []];
+        const [encPlate, [privateKey]] = uglify ? await serializeE2E({ accessKey, _body: authObj }, mtoken, serverE2E_PublicKey) : ['', []];
 
         socket = io(`${wsPrefix}://${baseUrl}`, {
             transports: ['websocket', 'polling', 'flashsocket'],
@@ -218,7 +218,7 @@ const listenDocument = (callback, onError, builder, config) => {
                     onError(simplifyCaughtError(err).simpleError);
                 } else console.error('unhandled listen for:', { path, find }, ' error:', err);
             } else {
-                if (uglify) snapshot = deserializeE2E(snapshot, serverE2E_PublicKey, privateKey);
+                if (uglify) snapshot = await deserializeE2E(snapshot, serverE2E_PublicKey, privateKey);
                 snapshot = deserializeBSON(snapshot)._;
                 dispatchSnapshot(snapshot);
 
@@ -290,7 +290,7 @@ const initOnDisconnectionTask = (builder, value, type) => {
         socket = io(`${wsPrefix}://${baseUrl}`, {
             transports: ['websocket', 'polling', 'flashsocket'],
             auth: uglify ? {
-                e2e: serializeE2E({ accessKey, _body: authObj }, mtoken, serverE2E_PublicKey)[0],
+                e2e: (await serializeE2E({ accessKey, _body: authObj }, mtoken, serverE2E_PublicKey))[0],
                 _m_internal: true
             } : {
                 ...mtoken ? { mtoken } : {},
@@ -365,7 +365,7 @@ const countCollection = async (builder, config) => {
             if (!disableAuth && await getReachableServer(projectUrl))
                 await awaitRefreshToken(projectUrl);
 
-            const [reqBuilder, [privateKey]] = buildFetchInterface({
+            const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
                     commands: { path, find: serializeToBase64(find) },
                     dbName,
@@ -380,7 +380,7 @@ const countCollection = async (builder, config) => {
             const r = await (await fetch(_documentCount(projectUrl, uglify), reqBuilder)).json();
             if (r.simpleError) throw r;
 
-            const f = uglify ? deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r;
+            const f = uglify ? await deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r;
 
             if (!disableCache)
                 setLodash(CacheStore.DatabaseCountResult, [projectUrl, dbUrl, dbName, accessId], f.result);
@@ -497,7 +497,7 @@ const findObject = async (builder, config) => {
             if (!disableAuth && await getReachableServer(projectUrl))
                 await awaitRefreshToken(projectUrl);
 
-            const [reqBuilder, [privateKey]] = buildFetchInterface({
+            const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
                     commands: {
                         config: pureConfig && serializeToBase64(pureConfig),
@@ -520,7 +520,7 @@ const findObject = async (builder, config) => {
             const r = await (await fetch((findOne ? _readDocument : _queryCollection)(projectUrl, uglify), reqBuilder)).json();
             if (r.simpleError) throw r;
 
-            const result = deserializeBSON((uglify ? deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r).result)._;
+            const result = deserializeBSON((uglify ? await deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r).result)._;
 
             if (shouldCache) insertRecord(builder, config, accessId, result);
             finalize({ liveResult: result || null });
@@ -634,7 +634,7 @@ const commitData = async (builder, value, type, config) => {
             if (!disableAuth && await getReachableServer(projectUrl))
                 await awaitRefreshToken(projectUrl);
 
-            const [reqBuilder, [privateKey]] = buildFetchInterface({
+            const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
                     commands: {
                         value: value && serializeToBase64({ _: value }),
@@ -656,7 +656,7 @@ const commitData = async (builder, value, type, config) => {
             const r = await (await fetch((isBatchWrite ? _writeMapDocument : _writeDocument)(projectUrl, uglify), reqBuilder)).json();
             if (r.simpleError) throw r;
 
-            const f = uglify ? deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r;
+            const f = uglify ? await deserializeE2E(r.e2e, serverE2E_PublicKey, privateKey) : r;
 
             finalize({ ...f }, undefined, { removeCache: true });
         } catch (e) {

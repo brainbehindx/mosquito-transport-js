@@ -61,7 +61,7 @@ export const mfetch = async (input = '', init, config) => {
     if ('uglified' in rawHeader)
         throw '"uglified" in header is a reserved prop';
 
-    if (!input.startsWith(projectUrl) && !rawApproach)
+    if (isBaseUrl && !rawApproach)
         throw `please set { rawApproach: true } if you're trying to access different endpoint at "${input}"`;
 
     if (body !== undefined) {
@@ -145,7 +145,7 @@ export const mfetch = async (input = '', init, config) => {
             const mtoken = Scoped.AuthJWTToken[projectUrl];
             const initType = rawHeader['content-type'];
 
-            const [reqBuilder, [privateKey]] = uglified ? serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
+            const [reqBuilder, [privateKey]] = uglified ? await serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
 
             const f = await fetch(isBaseUrl ? input : `${projectUrl}/${normalizeRoute(input)}`, {
                 ...isBaseUrl ? {} : { method: 'POST' },
@@ -170,7 +170,7 @@ export const mfetch = async (input = '', init, config) => {
             if (!isBaseUrl && simple) throw { simpleError: JSON.parse(simple) };
 
             const base64 = uglified ?
-                Buffer.from(deserializeE2E(await f.text(), serverE2E_PublicKey, privateKey), 'base64') :
+                Buffer.from(await deserializeE2E(await f.text(), serverE2E_PublicKey, privateKey), 'base64') :
                 Buffer.from(await f.arrayBuffer()).toString('base64');
 
             const resObj = {

@@ -103,7 +103,7 @@ export const decryptString = (txt, password, iv) => {
     return decrypt(txt, `${password || ''}${iv || ''}`).toString(Utf8Encoder);
 };
 
-export const serializeE2E = (data, auth_token, serverPublicKey) => {
+export const serializeE2E = async (data, auth_token, serverPublicKey) => {
     const inputData = new Uint8Array(Buffer.from(JSON.stringify([data, auth_token]), 'utf8'));
 
     if (inputData.byteLength > 10240) {
@@ -136,7 +136,7 @@ export const serializeE2E = (data, auth_token, serverPublicKey) => {
     ];
 };
 
-export const deserializeE2E = (data = '', serverPublicKey, clientPrivateKey) => {
+export const deserializeE2E = async (data = '', serverPublicKey, clientPrivateKey) => {
     const [binaryNonce, binaryData] = data.split('.').map(v => new Uint8Array(Buffer.from(v, 'base64')));
     let baseArray;
 
