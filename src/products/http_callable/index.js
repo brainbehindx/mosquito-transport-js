@@ -74,7 +74,7 @@ export const mfetch = async (input = '', init, config) => {
         ) throw `"body" must be any of string, buffer, object, File, Blob`;
     }
 
-    const rawBody = stringify([(body instanceof File || body instanceof Blob) ? await body.arrayBuffer() : body]);
+    const rawBody = stringify([(body instanceof File || body instanceof Blob) ? Buffer.from(await body.arrayBuffer()) : body]);
 
     const reqId = await niceHash(
         JSON.stringify([

@@ -15,6 +15,7 @@ import { parse, stringify } from 'json-buffer';
 import { Validator } from 'guard-object';
 import sendMessage from "./helpers/broadcaster";
 import cloneDeep from "lodash.clonedeep";
+import { Buffer } from "buffer";
 
 const {
     _listenCollection,
