@@ -39,6 +39,7 @@ export class MosquitoTransport {
         validateMTConfig(config, this);
         this.config = {
             ...config,
+            serverE2E_PublicKey: config.serverE2E_PublicKey && new Uint8Array(Buffer.from(config.serverE2E_PublicKey, 'base64')),
             castBSON: config.castBSON === undefined || config.castBSON,
             maxRetries: config.maxRetries || 3,
             uglify: config.enableE2E_Encryption

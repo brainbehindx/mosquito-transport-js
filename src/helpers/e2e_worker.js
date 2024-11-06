@@ -1,4 +1,5 @@
 import LimitTask from "limit-task";
+import naclPkg from 'tweetnacl-functional';
 
 function e2e_baseCode() {
     const serializeE2E = (data, serverPublicKey) => {
@@ -42,7 +43,7 @@ function e2e_baseCode() {
 }
 
 const workerCode = `
-   ${NACL.toString()}
+   ${naclPkg.NACL.toString()}
    const naclPkg = {};
 
    NACL(naclPkg);
@@ -70,7 +71,7 @@ const spawnWorker = () => {
         delete resolution[session];
     };
 
-    const queue = LimitTask();
+    const queue = LimitTask(3);
 
     return (type, params) => queue(() =>
         new Promise((resolve, reject) => {
@@ -95,14 +96,14 @@ const addTask = (type, params) => {
             e2e_engines.push(spawnWorker());
         } else currentTask = 0;
     }
-    e2e_engines[currentTask](type, params);
+    return e2e_engines[currentTask](type, params);
 }
 
 export default {
     encrypt: (bufferData, serverPublicKey) => {
-        addTask('encrypt', [bufferData, serverPublicKey]);
+        return addTask('encrypt', [bufferData, serverPublicKey]);
     },
     decrypt: (data, nonce, serverPublicKey, clientPrivateKey) => {
-        addTask('decrypt', [data, nonce, serverPublicKey, clientPrivateKey]);
+        return addTask('decrypt', [data, nonce, serverPublicKey, clientPrivateKey]);
     }
 };
