@@ -1,6 +1,6 @@
 {
   "name": "mosquito-transport-js",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Javascript web sdk for mosquito-transport (https://github.com/deflexable/mosquito-transport)",
   "main": "src/index.js",
   "type": "module",
