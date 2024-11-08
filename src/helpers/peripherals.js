@@ -5,6 +5,7 @@ import Utf8Encoder from 'crypto-js/enc-utf8.js';
 import naclPkg from 'tweetnacl-functional';
 import getLodash from "lodash.get";
 import e2e_worker from "./e2e_worker";
+import { deserialize, serialize } from "entity-serializer";
 
 const { encrypt, decrypt } = aes_pkg;
 const { box, randomBytes } = naclPkg;
@@ -104,51 +105,51 @@ export const decryptString = (txt, password, iv) => {
 };
 
 export const serializeE2E = async (data, auth_token, serverPublicKey) => {
-    const inputData = new Uint8Array(Buffer.from(JSON.stringify([data, auth_token]), 'utf8'));
+    const inputData = serialize([data, auth_token]);
 
     if (inputData.byteLength > 10240) {
         // dispatch to background thread
-        const { data, pair, nonce } = e2e_worker.encrypt(inputData, serverPublicKey);
-        const pubBase64 = Buffer.from(pair.publicKey).toString('base64'),
-            nonceBase64 = Buffer.from(nonce).toString('base64');
+        const { data, pair, nonce } = await e2e_worker.encrypt(inputData, serverPublicKey);
 
         return [
-            `${pubBase64}.${nonceBase64}.${Buffer.from(data).toString('base64')}`,
+            serialize([pair.publicKey, nonce, data]),
             [pair.secretKey, pair.publicKey]
         ];
     }
 
     const pair = box.keyPair(),
-        nonce = randomBytes(box.nonceLength),
-        pubBase64 = Buffer.from(pair.publicKey).toString('base64'),
-        nonceBase64 = Buffer.from(nonce).toString('base64');
+        nonce = randomBytes(box.nonceLength);
 
     return [
-        `${pubBase64}.${nonceBase64}.${Buffer.from(
-            box(
-                inputData,
-                nonce,
-                serverPublicKey,
-                pair.secretKey
+        serialize([
+            pair.publicKey,
+            nonce,
+            Buffer.from(
+                box(
+                    inputData,
+                    nonce,
+                    serverPublicKey,
+                    pair.secretKey
+                )
             )
-        ).toString('base64')}`,
+        ]),
         [pair.secretKey, pair.publicKey]
     ];
 };
 
-export const deserializeE2E = async (data = '', serverPublicKey, clientPrivateKey) => {
-    const [binaryNonce, binaryData] = data.split('.').map(v => new Uint8Array(Buffer.from(v, 'base64')));
+export const deserializeE2E = async (data, serverPublicKey, clientPrivateKey) => {
+    const [binaryNonce, binaryData] = deserialize(data);
     let baseArray;
 
     if (binaryData.byteLength > 10240) {
         // dispatch to background thread
-        baseArray = e2e_worker.decrypt(binaryData, binaryNonce, serverPublicKey, clientPrivateKey);
+        baseArray = await e2e_worker.decrypt(binaryData, binaryNonce, serverPublicKey, clientPrivateKey);
     } else {
         baseArray = box.open(binaryData, binaryNonce, serverPublicKey, clientPrivateKey);
     }
 
     if (!baseArray) throw 'Decrypting e2e message failed';
-    return JSON.parse(Buffer.from(baseArray).toString('utf8'))[0];
+    return deserialize(baseArray);
 };
 
 export const encodeBinary = (s) => Buffer.from(s, 'utf8').toString('base64');

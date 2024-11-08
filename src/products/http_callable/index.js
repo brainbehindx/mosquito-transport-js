@@ -7,7 +7,7 @@ import { awaitRefreshToken } from "../auth/accessor";
 import { simplifyCaughtError } from "simplify-error";
 import { guardObject, Validator } from "guard-object";
 import cloneDeep from "lodash.clonedeep";
-import { stringify } from "json-buffer";
+import { serialize } from "entity-serializer";
 
 const buildFetchData = (data) => {
     const { ok, type, status, statusText, redirected, url, headers, size, base64 } = data;
@@ -74,15 +74,15 @@ export const mfetch = async (input = '', init, config) => {
         ) throw `"body" must be any of string, buffer, object, File, Blob`;
     }
 
-    const rawBody = stringify([(body instanceof File || body instanceof Blob) ? Buffer.from(await body.arrayBuffer()) : body]);
+    const rawBody = (body instanceof File || body instanceof Blob) ? Buffer.from(await body.arrayBuffer()) : body;
 
     const reqId = await niceHash(
-        JSON.stringify([
+        serialize([
             rawHeader,
             rawBody,
             !!disableAuth,
             input
-        ])
+        ]).toString('base64')
     );
 
     let retries = 0, hasFinalize;
@@ -157,7 +157,7 @@ export const mfetch = async (input = '', init, config) => {
                     ...rawHeader,
                     ...uglified ? {
                         uglified,
-                        'content-type': 'text/plain',
+                        'content-type': 'request/buffer',
                         ...initType ? { 'init-content-type': initType } : {}
                     } : {},
                     ...(disableAuth || !mtoken || uglified || isBaseUrl) ? {} : { mtoken },
@@ -170,7 +170,7 @@ export const mfetch = async (input = '', init, config) => {
             if (!isBaseUrl && simple) throw { simpleError: JSON.parse(simple) };
 
             const base64 = uglified ?
-                Buffer.from(await deserializeE2E(await f.text(), serverE2E_PublicKey, privateKey), 'base64') :
+                Buffer.from(await deserializeE2E(await f.arrayBuffer(), serverE2E_PublicKey, privateKey)).toString('base64') :
                 Buffer.from(await f.arrayBuffer()).toString('base64');
 
             const resObj = {
