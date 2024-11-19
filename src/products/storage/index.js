@@ -12,6 +12,7 @@ export class MTStorage {
     }
 
     uploadFile = (file, destination, onComplete, onProgress, reqOptions) => {
+        const { awaitServer, createHash } = reqOptions || {};
         let hasCancelled = false,
             hasFinished = false,
             xhr;
@@ -44,7 +45,6 @@ export class MTStorage {
 
             const { projectUrl, accessKey, uglify } = this.builder;
             xhr = new XMLHttpRequest();
-            const { awaitServer, createHash } = reqOptions || {};
 
             if (awaitServer) await awaitReachableServer(projectUrl);
             await awaitRefreshToken(projectUrl);

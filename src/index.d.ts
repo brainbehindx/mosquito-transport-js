@@ -17,6 +17,12 @@ interface MTConfig {
      */
     serverE2E_PublicKey?: string;
     /**
+     * extra headers that will be appended to all outgoing request in this instance
+     */
+    extraHeaders?: {
+        [key: string]: string
+    };
+    /**
      * true to deserialize BSON values to their Node.js closest equivalent types
      * 
      * @default true
@@ -53,6 +59,13 @@ export function FIND_GEO_JSON(coordinates: [latitude, longitude], offSetMeters: 
 };
 
 export const AUTH_PROVIDER_ID: auth_provider_id;
+
+/**
+ * useful for avoiding encrypting data and extra overhead
+ */
+export class DoNotEncrypt {
+    value: any;
+}
 
 interface auth_provider_id {
     GOOGLE: 'google.com';
@@ -436,14 +449,27 @@ interface TokenManager {
 
 declare type Base64String = string;
 
-interface ReqOptions {
-    awaitServer?: boolean;
+interface UploadOptions {
+    /**
+     * optionally create hash for this upload to save disk space
+     */
     createHash?: boolean;
+    /**
+     * wait for a reachable server before initiating the upload task
+     */
+    awaitServer?: boolean;
+}
+
+interface DownloadOptions {
+    /**
+     * wait for a reachable server before initiating the download task
+     */
+    awaitServer?: boolean;
 }
 
 interface MTStorage {
-    downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void) => () => void;
-    uploadFile: (file: Base64String | Blob | Buffer | File, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: ReqOptions) => () => void;
+    downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void, options?: DownloadOptions) => () => void;
+    uploadFile: (file: Base64String | Blob | File | Buffer, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: UploadOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;
     deleteFolder: (folder: string) => Promise<void>;
 }
@@ -467,13 +493,13 @@ interface ErrorResponse {
 }
 
 /** @public */
-export declare type Sort = string | Exclude<SortDirection, {
+declare type Sort = string | Exclude<SortDirection, {
     $meta: string;
 }> | string[] | {
     [key: string]: SortDirection;
 } | Map<string, SortDirection> | [string, SortDirection][] | [string, SortDirection];
 
 /** @public */
-export declare type SortDirection = 1 | -1 | 'asc' | 'desc' | 'ascending' | 'descending' | {
+declare type SortDirection = 1 | -1 | 'asc' | 'desc' | 'ascending' | 'descending' | {
     $meta: string;
 };
