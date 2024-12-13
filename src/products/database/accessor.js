@@ -353,7 +353,7 @@ export const syncCache = (builder, result) => {
                         });
                     });
                     if (!scrapDocs.length) {
-                        const scrapYard = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data']);
+                        const scrapYard = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data'], {});
                         Object.values(scrapYard).forEach(v => {
                             v.listing.forEach(doc => {
                                 if (confirmFilterDoc(doc, find || findOne)) {
