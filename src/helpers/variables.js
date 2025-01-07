@@ -36,6 +36,8 @@ export const CacheStore = {
     DatabaseCountResult: {},
     DatabaseStats: {},
     AuthStore: {},
+    PendingAuthPurge: {},
+    EmulatedAuth: {},
     PendingWrites: {},
     FetchedStore: {}
 };

@@ -1,7 +1,6 @@
 import { deserializeE2E, listenReachableServer, serializeE2E } from "./helpers/peripherals";
-import { releaseCacheStore, awaitStore } from "./helpers/utils";
-import { CacheStore, Scoped } from "./helpers/variables";
-import { MTAuth } from "./products/auth";
+import { awaitStore, releaseCacheStore } from "./helpers/utils";
+import { Scoped, CacheStore } from "./helpers/variables";
 import { MTCollection, batchWrite, trySendPendingWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener, TokenRefreshListener } from "./helpers/listeners";
@@ -13,8 +12,9 @@ import { AUTH_PROVIDER_ID, CACHE_PROTOCOL } from "./helpers/values";
 import EngineApi from './helpers/engine_api';
 import { Validator } from 'guard-object';
 import sendMessage from "./helpers/broadcaster";
-import cloneDeep from "lodash.clonedeep";
-import { Buffer } from "buffer";
+import cloneDeep from 'lodash.clonedeep';
+import { Buffer } from 'buffer';
+import MTAuth from './products/auth';
 
 const {
     _listenCollection,
@@ -51,7 +51,7 @@ export class MosquitoTransport {
         this.config.wsPrefix = this.config.secureUrl ? 'wss' : 'ws';
 
         if (!Scoped.ReleaseCacheData)
-            throw `releaseCache must be called before creating any ${this.constructor.name} instance`;
+            throw `initializeCache must be called before creating any ${this.constructor.name} instance`;
 
         if (!Scoped.InitializedProject[projectUrl]) {
             Scoped.InitializedProject[projectUrl] = cloneDeep(this.config);
@@ -128,7 +128,7 @@ export class MosquitoTransport {
         }
     }
 
-    static releaseCache(prop) {
+    static initializeCache(prop) {
         if (Scoped.ReleaseCacheData) throw `calling ${this.name}() multiple times is prohibited`;
         validateReleaseCacheProp({ ...prop });
         Scoped.ReleaseCacheData = { ...prop };
