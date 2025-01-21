@@ -1,6 +1,6 @@
 {
   "name": "mosquito-transport-js",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Javascript web sdk for mosquito-transport (https://github.com/brainbehindx/mosquito-transport)",
   "main": "src/index.js",
   "type": "module",
@@ -42,7 +42,7 @@
     "simplify-error": "^1.0.1",
     "socket.io-client": "^4.6.2",
     "subscription-listener": "^1.1.2",
-    "tweetnacl-functional": "^1.0.4"
+    "tweetnacl-functional": "^1.0.5"
   },
   "devDependencies": {
     "@babel/core": "^7.24.6",

@@ -1,6 +1,8 @@
 import LimitTask from "limit-task";
 import naclPkg from 'tweetnacl-functional';
 
+const { NACL } = naclPkg;
+
 function e2e_baseCode() {
     const serializeE2E = (data, serverPublicKey) => {
         const pair = box.keyPair(),
@@ -43,15 +45,15 @@ function e2e_baseCode() {
 }
 
 const workerCode = `
-   ${naclPkg.NACL.toString()}
+   const NACL_PKG = ${NACL.toString()};
    const naclPkg = {};
 
-   NACL(naclPkg);
+   NACL_PKG(naclPkg);
 
    const { box, randomBytes } = naclPkg;
 
-   ${e2e_baseCode.toString()}
-   e2e_baseCode();
+   const baseCode = ${e2e_baseCode.toString()};
+   baseCode();
 `;
 
 const spawnWorker = () => {
