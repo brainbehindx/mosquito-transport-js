@@ -1,13 +1,10 @@
 import { Buffer } from "buffer";
 import { ServerReachableListener } from "./listeners";
-import aes_pkg from 'crypto-js/aes.js';
-import Utf8Encoder from 'crypto-js/enc-utf8.js';
 import naclPkg from 'tweetnacl-functional';
 import getLodash from "lodash/get";
 import e2e_worker from "./e2e_worker";
 import { deserialize, serialize } from "entity-serializer";
 
-const { encrypt, decrypt } = aes_pkg;
 const { box, randomBytes } = naclPkg;
 
 export const listenReachableServer = (callback, projectUrl) => {
@@ -43,7 +40,7 @@ export const normalizeRoute = (route = '') => route.split('').map((v, i, a) =>
 ).join('');
 
 export const shuffleArray = (n) => {
-    const array = [...n];
+    const array = n.slice(0);
     let currentIndex = array.length, randomIndex;
 
     while (currentIndex != 0) {
@@ -67,7 +64,7 @@ export function sortArrayByObjectKey(arr = [], key) {
     });
 };
 
-export async function niceHash(str) {
+export async function niceHash(str = '') {
     try {
         // Convert the string to a Uint8Array
         const encoder = new TextEncoder();
@@ -94,14 +91,6 @@ export const sameInstance = (var1, var2) => {
     } catch (_) {
         return false;
     }
-};
-
-export const encryptString = (txt, password, iv) => {
-    return encrypt(txt, `${password || ''}${iv || ''}`).toString();
-};
-
-export const decryptString = (txt, password, iv) => {
-    return decrypt(txt, `${password || ''}${iv || ''}`).toString(Utf8Encoder);
 };
 
 export const serializeE2E = async (data, auth_token, serverPublicKey) => {

@@ -8,9 +8,9 @@ import unsetLodash from 'lodash/unset';
 import { DatabaseRecordsListener } from "../../helpers/listeners";
 import cloneDeep from "lodash/cloneDeep";
 import { BSONRegExp, ObjectId, Timestamp } from "bson";
-import { GuardSignal, niceGuard, Validator } from "guard-object";
+import { niceGuard, Validator } from "guard-object";
 import { TIMESTAMP } from "../..";
-import { decrementDatabaseSize, incrementDatabaseSize } from "./counter";
+import { docSize, incrementDatabaseSize } from "./counter";
 import { serializeToBase64 } from "./bson";
 import sendMessage from "../../helpers/broadcaster";
 
@@ -26,8 +26,8 @@ export const listenQueryEntry = (callback, { accessId, builder, config, processI
 
     const listener = DatabaseRecordsListener.listenTo('d', async (dispatchId) => {
         if (dispatchId !== processId) return;
-        const cache = await getRecord(builder, config, accessId);
-        if (cache) callback(cache[episode]);
+        const cache = await getRecord(builder, accessId, episode);
+        if (cache) callback(cache[0]);
     });
 
     return () => {
@@ -41,100 +41,109 @@ export const listenQueryEntry = (callback, { accessId, builder, config, processI
     };
 };
 
-export const insertRecord = async (builder, config, accessId, value) => {
+export const insertCountQuery = async (builder, access_id, value) => {
+    const { projectUrl, dbUrl, dbName, path } = builder;
+
+    setLodash(CacheStore.DatabaseCountResult, [projectUrl, dbUrl, dbName, path, access_id], { value, touched: Date.now() });
+    updateCacheStore(undefined, ['DatabaseCountResult'])
+}
+
+export const getCountQuery = async (builder, access_id) => {
+    const { projectUrl, dbUrl, dbName, path } = builder;
+    const data = getLodash(CacheStore.DatabaseCountResult, [projectUrl, dbUrl, dbName, path, access_id]);
+    if (data) data.touched = Date.now();
+    return data && data.value;
+}
+
+export const insertRecord = async (builder, config, accessIdWithoutLimit, value, episode = 0) => {
     builder = builder && cloneDeep(builder);
     config = config && cloneDeep(config);
     value = value && cloneDeep(value);
 
     await awaitStore();
     const { projectUrl, dbUrl, dbName, path, command } = builder;
-    const entityId = await generateRecordID({}, config);
-    const colData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data', entityId], { config, command, listing: [] });
-    const trackedData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'record', accessId]);
+    const { limit } = command;
+    const thisSize = docSize(value);
 
-    const newList = value ? Array.isArray(value) ? value : [value] : [];
+    const instanceData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance', accessIdWithoutLimit]);
+    const resultData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'episode', accessIdWithoutLimit, limit]);
+    const isEpisode = episode === 1 || !!resultData;
 
-    const { tracks, ignore, registeredOn } = trackedData || {};
-    const trackedList = [...tracks || []];
-    const ignoreList = [...ignore || []];
+    const editionSizeOffset = thisSize - (instanceData?.size || 0);
+    const resultSizeOffset = isEpisode ? thisSize - (resultData?.size || 0) : 0;
 
-    const addSet = (arr, _id) => {
-        const dex = arr.findIndex(v => CompareBson.equal(v, _id));
-        if (dex === -1) arr.push(_id);
-    }
-
-    const deleteSet = (arr, _id) => {
-        const dex = arr.findIndex(v => CompareBson.equal(v, _id));
-        if (dex !== -1) arr.splice(dex, 1);
-    }
-
-    newList.forEach(e => {
-        const b4DocIndex = colData.listing.findIndex(v => CompareBson.equal(v._id, e._id));
-        if (b4DocIndex === -1) {
-            colData.listing.push(e);
-            incrementDatabaseSize(projectUrl, e);
-        } else {
-            decrementDatabaseSize(projectUrl, colData.listing[b4DocIndex]);
-            incrementDatabaseSize(projectUrl, e);
-            colData.listing[b4DocIndex] = e;
-        }
-        addSet(trackedList, e._id);
-    });
-
-    (tracks || []).forEach(e => {
-        if (newList.findIndex(v => CompareBson.equal(v._id, e)) === -1) {
-            if (colData.listing.findIndex(v => CompareBson.equal(v._id, e)) === -1) {
-                deleteSet(trackedList, e);
-                deleteSet(ignoreList, e);
-            } else addSet(ignoreList, e);
-        } else deleteSet(ignoreList, e);
-    });
-
-    setLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data', entityId], colData);
-    setLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'record', accessId], {
+    const newData = {
         command,
-        result: value,
-        tracks: [...trackedList],
-        ignore: [...ignoreList],
-        registeredOn: registeredOn || Date.now(),
-        updatedOn: Date.now()
-    });
-    updateCacheStore();
+        config,
+        latest_limiter: limit,
+        size: thisSize,
+        data: value ? Array.isArray(value) ? value : [value] : [],
+        touched: Date.now()
+    };
+    const newResultData = isEpisode && {
+        data: value,
+        size: thisSize,
+        touched: Date.now()
+    };
+
+    incrementDatabaseSize(builder, path, editionSizeOffset + resultSizeOffset);
+
+    setLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance', accessIdWithoutLimit], newData);
+    if (isEpisode) setLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'episode', accessIdWithoutLimit, limit], cloneDeep(newResultData));
+    updateCacheStore(undefined, ['DatabaseStore', 'DatabaseStats']);
 };
 
-export const getRecord = async (builder, config, accessId) => {
+export const getRecord = async (builder, accessIdWithoutLimit, episode = 0) => {
     await awaitStore();
     const { projectUrl, dbUrl, dbName, path, command } = builder;
-    const { find, findOne, sort, direction, limit, random } = command;
-    const entityId = await generateRecordID({}, config);
-    const colData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data', entityId]);
-    const colRecord = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'record', accessId]);
+    const { limit, sort, direction, random } = command;
+    const isEpisode = episode === 1;
 
-    if (!colRecord) return null;
-    let choosenColData = colData.listing.filter(v =>
-        !colRecord.ignore.includes(v._id) &&
-        confirmFilterDoc(v, findOne || find || {})
-    );
+    const transformData = (data) => {
+        data = cloneDeep(data);
+        if (random) {
+            data = shuffleArray(data);
+        } else if (sort) {
+            data = sortArrayByObjectKey(data.slice(0), sort);
+            if (
+                direction === -1 ||
+                direction === 'desc' ||
+                direction === 'descending'
+            ) data = data.slice(0).reverse();
+        }
 
-    if (random) {
-        choosenColData = shuffleArray(choosenColData);
-    } else if (sort) {
-        sortArrayByObjectKey(choosenColData, sort);
-        if (
-            direction === -1 ||
-            direction === 'desc' ||
-            direction === 'descending'
-        ) choosenColData.reverse();
+        if (findOne) {
+            data = data[0];
+        } else if (limit) data = data.slice(0, limit);
+
+        return data;
     }
 
-    if (findOne) {
-        choosenColData = choosenColData[0];
-    } else if (limit) choosenColData.slice(0, limit);
+    if (isEpisode) {
+        const resultData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'episode', accessIdWithoutLimit, limit]);
+        if (resultData) {
+            resultData.touched = Date.now();
+            return [cloneDeep(resultData.data)];
+        }
+        return null;
+    }
 
-    return [choosenColData, colRecord.result];
+    const instanceData = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance', accessIdWithoutLimit]);
+    if (!instanceData) return null;
+    const { latest_limiter, data } = instanceData;
+
+    if (
+        latest_limiter === undefined ||
+        (Validator.POSITIVE_NUMBER(limit) && latest_limiter >= limit)
+    ) {
+        instanceData.touched = Date.now();
+        return [transformData(data)];
+    }
+
+    return null;
 };
 
-export const generateRecordID = (builder, config) => {
+export const generateRecordID = (builder, config, removeLimit) => {
     builder = builder && cloneDeep(builder);
     config = config && cloneDeep(config);
 
@@ -152,16 +161,16 @@ export const generateRecordID = (builder, config) => {
         }).filter(([_, v]) => v !== undefined)
     );
 
-    if (command) recordObj.command = arrangeCommands(command);
+    if (command) recordObj.command = arrangeCommands(command, removeLimit);
     if (extraction) {
-        if (Array.isArray(extraction)) recordObj.extraction = extraction.map(arrangeCommands);
+        if (Array.isArray(extraction)) recordObj.extraction = extraction.map(v => arrangeCommands(v));
         else recordObj.extraction = arrangeCommands(extraction);
     }
 
     return niceHash(serializeToBase64(recordObj));
 };
 
-const arrangeCommands = c => {
+const arrangeCommands = (c, removeLimit) => {
     c = cloneDeep(c);
     const sortFind = f => {
         ['$and', '$or', '$nor'].forEach(n => {
@@ -175,11 +184,12 @@ const arrangeCommands = c => {
     if (c.sort) c.direction = [-1, 'desc', 'descending'].includes(c.direction) ? 'desc' : 'asc';
     if (c.find) c.find = sortFind(c.find);
     if (c.findOne) c.findOne = sortFind(c.findOne);
+    if (removeLimit && 'limit' in c) delete c.limit;
     return sortObject(c);
 };
 
 const sortObject = (o) => Object.fromEntries(
-    Object.entries(o).sort((a, b) => (a > b) ? 1 : (a < b) ? -1 : 0)
+    Object.entries(o).sort(([a], [b]) => (a > b) ? 1 : (a < b) ? -1 : 0)
 );
 
 const recursiveFlat = (a) => {
@@ -270,23 +280,24 @@ export const addPendingWrites = async (builder, writeId, result) => {
     builder = builder && cloneDeep(builder);
     result = result && cloneDeep(result);
     await awaitStore();
+    const pendingSnapshot = cloneDeep(result);
 
     const { projectUrl } = builder;
     const { editions, pathChanges } = syncCache(builder, result);
 
     setLodash(CacheStore.PendingWrites, [projectUrl, writeId], cloneDeep({
         builder,
-        snapshot: result,
+        snapshot: pendingSnapshot,
         editions,
         addedOn: Date.now()
     }));
 
-    updateCacheStore();
+    updateCacheStore(undefined, ['DatabaseStore', 'PendingWrites', 'DatabaseStats']);
     notifyDatabaseNodeChanges(builder, pathChanges);
     sendMessage('database-sync', {
         builder,
         writeId,
-        result: serializeToBase64({ _: result })
+        result: serializeToBase64({ _: pendingSnapshot })
     });
 };
 
@@ -306,14 +317,33 @@ export const syncCache = (builder, result) => {
         WriteValidator[type]({ find, value: writeObj });
         validateCollectionName(path);
         pathChanges.add(path);
-        const colObj = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data'], {});
+        const colObj = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance']);
 
-        Object.entries(colObj).forEach(([entityId, { listing, config }]) => {
+        if (colObj)
+            Object.entries(colObj).forEach(e =>
+                MutateDataInstance(
+                    e,
+                    path =>
+                        Object.values(
+                            getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance'], {})
+                        ).map(({ data }) => data).flat()
+                )
+            );
+
+        function MutateDataInstance([entityId, dataObj], pathGetter) {
+            const { data: instance_data, command, config } = dataObj;
+            const entityFind = command.findOne || command.find;
             const { extraction } = config || {};
 
             const logChanges = (d) => {
-                editions.push([entityId, d, path]);
+                editions.push(cloneDeep([entityId, d, path]));
+                const [b4, af] = d;
+                const offset = docSize(af) - docSize(b4);
+                dataObj.size += offset;
+                incrementDatabaseSize(builder, path, offset);
             };
+
+            const snipUpdate = doc => snipDocument(doc, entityFind, config);
 
             const accessExtraction = obj => {
                 const buildAssignedExtraction = (data) => {
@@ -332,18 +362,18 @@ export const syncCache = (builder, result) => {
                 const extractionResultant = buildAssignedExtraction(obj);
                 const extractionBinary = serializeToBase64({ _: extractionResultant });
 
-                const sameProjection = listing.find(({ _foreign_doc, ...restDoc }) =>
+                const sameProjection = instance_data.find(({ _foreign_doc, ...restDoc }) =>
                     extractionBinary === serializeToBase64({ _: buildAssignedExtraction(restDoc) })
                 );
 
                 if (sameProjection) return sameProjection._foreign_doc;
 
-                // if no matching extraction was found, proceed to scrapping other paths
+                // if no matching extraction was found, proceed to scrapping each _foreign_doc segment
                 const scrapedProjection = (Array.isArray(extractionResultant) ? extractionResultant : [extractionResultant]).map((query, i) => {
                     const { sort, direction, limit, find, findOne, collection: path } = query;
-                    const scrapDocs = [];
+                    let scrapDocs = [];
 
-                    listing.forEach(({ _foreign_doc }) => {
+                    instance_data.forEach(({ _foreign_doc }) => {
                         _foreign_doc = (Array.isArray(_foreign_doc) ? _foreign_doc : [_foreign_doc])[i];
 
                         recursiveFlat([_foreign_doc]).forEach(e => {
@@ -352,37 +382,43 @@ export const syncCache = (builder, result) => {
                             }
                         });
                     });
+
                     if (!scrapDocs.length) {
-                        const scrapYard = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data'], {});
-                        Object.values(scrapYard).forEach(v => {
-                            v.listing.forEach(doc => {
-                                if (confirmFilterDoc(doc, find || findOne)) {
-                                    scrapDocs.push(snipDocument(doc, find || findOne, config));
-                                }
-                            });
+                        // if no matching extraction was found, proceed to scrapping ancestor path
+                        pathGetter(path).forEach(({ _foreign_doc, ...doc }) => {
+                            if (confirmFilterDoc(doc, find || findOne)) {
+                                scrapDocs.push(doc);
+                            }
                         });
                     }
+                    scrapDocs = scrapDocs.filter((v, i, a) => a.findIndex(b => b._id === v._id) === i);
                     if (sort) sortArrayByObjectKey(scrapDocs, sort);
                     if ([-1, 'desc', 'descending'].includes(direction)) scrapDocs.reverse();
-                    if (limit) scrapDocs.splice(limit);
+                    if (limit) scrapDocs = scrapDocs.slice(0, limit);
+                    scrapDocs = scrapDocs.map(v => snipDocument(v, find || findOne, query));
 
                     return findOne ? scrapDocs[0] : scrapDocs;
                 });
 
-                return Array.isArray(extraction) ? scrapedProjection : scrapedProjection[0];
+                return cloneDeep(Array.isArray(extraction) ? scrapedProjection : scrapedProjection[0]);
             }
 
             if (['setOne', 'setMany'].includes(type)) {
                 (type === 'setOne' ? [writeObj] : writeObj).forEach(e => {
-                    if (listing.findIndex(v => CompareBson.equal(v._id, e._id)) === -1) {
-                        const obj = deserializeNonAtomicWrite(e);
+                    const obj = deserializeNonAtomicWrite(e);
+                    if (extraction) obj._foreign_doc = accessExtraction(obj);
 
-                        if (extraction) obj._foreign_doc = accessExtraction(obj);
-                        listing.push(obj);
-                        logChanges([undefined, obj]);
-                    } else if (!duplicateSets[e._id])
-                        console.warn(`document with _id=${e._id} already exist locally with ${type}() operation, skipping to online commit`);
-                    duplicateSets[e._id] = true;
+                    if (confirmFilterDoc(obj, entityFind)) {
+
+                        if (instance_data.findIndex(v => CompareBson.equal(v._id, e._id)) === -1) {
+                            const x = snipUpdate(obj);
+                            instance_data.push(x);
+                            logChanges([undefined, x]);
+                        } else if (!duplicateSets[e._id]) {
+                            console.warn(`document with _id=${e._id} already exist locally with ${type}() operation, skipping to online commit`);
+                            duplicateSets[e._id] = true;
+                        }
+                    }
                 });
                 return;
             }
@@ -390,45 +426,58 @@ export const syncCache = (builder, result) => {
             if (['putOne', 'replaceOne'].includes(type)) {
                 const extras = createWriteFromFind(find);
 
-                for (let i = 0; i < listing.length; i++) {
-                    const doc = listing[i];
+                let deletions = 0;
+                const cdata = instance_data.slice(0);
+
+                for (let i = 0; i < cdata.length; i++) {
+                    const doc = cdata[i];
+
                     if (confirmFilterDoc(doc, find)) {
                         const obj = deserializeNonAtomicWrite({
                             ...extras,
                             ...writeObj,
                             ...'_id' in extras ? {} : { _id: doc._id }
                         });
-
                         if (extraction) obj._foreign_doc = accessExtraction(obj);
-                        listing[i] = obj;
-                        logChanges([doc, obj]);
+
+                        if (confirmFilterDoc(obj, entityFind)) {
+                            const x = snipUpdate(obj);
+                            instance_data[i - deletions] = x;
+                            logChanges([doc, x]);
+                        } else {
+                            instance_data.splice(i - deletions++, 1);
+                            logChanges([doc, undefined]);
+                        }
                         return;
                     }
                 }
+
                 if (type === 'putOne') {
                     const obj = deserializeNonAtomicWrite({
                         ...extras,
                         ...writeObj,
                         ...'_id' in extras ? {} : { _id: new ObjectId() }
                     });
-
                     if (extraction) obj._foreign_doc = accessExtraction(obj);
-                    listing.push(obj);
-                    logChanges([undefined, obj]);
+
+                    if (confirmFilterDoc(obj, entityFind)) {
+                        const x = snipUpdate(obj);
+                        instance_data.push(x);
+                        logChanges([undefined, x]);
+                    }
                 }
                 return;
             }
 
             if (['deleteOne', 'deleteMany'].includes(type)) {
                 let deletions = 0;
+                const cdata = instance_data.slice(0);
 
-                for (let i = 0; i < listing.length; i++) {
-                    const dex = deletions + i;
-                    const doc = listing[dex];
+                for (let i = 0; i < cdata.length; i++) {
+                    const doc = cdata[i];
                     if (confirmFilterDoc(doc, find)) {
-                        listing.splice(dex, 1);
-                        logChanges([doc]);
-                        --deletions;
+                        instance_data.splice(i - deletions++, 1);
+                        logChanges([doc, undefined]);
                         if (type === 'deleteOne') return;
                     }
                 }
@@ -436,14 +485,23 @@ export const syncCache = (builder, result) => {
             }
 
             let founded;
-            for (let i = 0; i < listing.length; i++) {
-                const doc = listing[i];
+            let deletions = 0;
+            const cdata = instance_data.slice(0);
+
+            for (let i = 0; i < cdata.length; i++) {
+                const doc = cdata[i];
                 if (confirmFilterDoc(doc, find)) {
                     const obj = deserializeAtomicWrite(doc, deserializeWriteValue(writeObj), false, type);
-
                     if (extraction) obj._foreign_doc = accessExtraction(obj);
-                    listing[i] = obj;
-                    logChanges([doc, obj]);
+
+                    if (confirmFilterDoc(obj, entityFind)) {
+                        const x = snipUpdate(obj);
+                        instance_data[i - deletions] = x;
+                        logChanges([doc, x]);
+                    } else {
+                        instance_data.splice(i - deletions++, 1);
+                        logChanges([doc, undefined]);
+                    }
 
                     founded = true;
                     if (type.endsWith('One')) return;
@@ -461,12 +519,15 @@ export const syncCache = (builder, result) => {
                         type
                     )
                 };
-
                 if (extraction) obj._foreign_doc = accessExtraction(obj);
-                listing.push(obj);
-                logChanges([undefined, obj]);
+
+                if (confirmFilterDoc(obj, entityFind)) {
+                    const x = snipUpdate(obj);
+                    instance_data.push(x);
+                    logChanges([undefined, x]);
+                }
             }
-        });
+        };
     });
 
     return { editions, pathChanges: [...pathChanges] };
@@ -476,12 +537,12 @@ export const removePendingWrite = async (builder, writeId, revert) => {
     await awaitStore();
     const { projectUrl } = builder;
     const pendingData = getLodash(CacheStore.PendingWrites, [projectUrl, writeId]);
-
     if (!pendingData) return;
+
     const pathChanges = revert ? revertChanges(builder, pendingData.editions) : [];
 
     unsetLodash(CacheStore.PendingWrites, [projectUrl, writeId]);
-    updateCacheStore();
+    updateCacheStore(undefined, ['PendingWrites', 'DatabaseStore', 'DatabaseStats']);
     notifyDatabaseNodeChanges(builder, pathChanges);
     sendMessage('database-revert', { writeId, revert });
 };
@@ -490,30 +551,44 @@ export const revertChanges = (builder, pendingData) => {
     const { projectUrl, dbUrl, dbName } = builder;
     const pathChanges = new Set([]);
 
-    pendingData.forEach(([entityId, [b4Doc, afDoc], path]) => {
-        const colObj = getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'data']);
-        const colList = colObj?.[entityId]?.listing;
+    pendingData.forEach(([access_id, [b4Doc, afDoc], path]) => {
+        RevertMutation(getLodash(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance', access_id]));
 
-        if (colList) {
-            if (afDoc) {
-                const editedIndex = colList.findIndex(e => CompareBson.equal(e._id, afDoc._id));
-                if (editedIndex !== -1) {
-                    if (
-                        serializeToBase64(afDoc) === serializeToBase64(colList[editedIndex])
-                    ) {
-                        if (b4Doc) {
-                            colList[editedIndex] = b4Doc;
-                        } else colList.splice(editedIndex, 1);
-                    }
-                }
-            } else if (
-                b4Doc &&
-                colList.findIndex(e => CompareBson.equal(e._id, b4Doc._id)) === -1
-            ) {
-                colList.push(b4Doc);
+        function RevertMutation(colObj) {
+            const colList = colObj?.data;
+
+            const updateSize = (b4, af) => {
+                const offset = docSize(af) - docSize(b4);
+                colObj.size += offset;
+                incrementDatabaseSize(builder, path, offset);
             }
+
+            if (colList) {
+                if (afDoc) {
+                    const editedIndex = colList.findIndex(e => CompareBson.equal(e._id, afDoc._id));
+                    if (editedIndex !== -1) {
+                        if (
+                            serializeToBase64(afDoc) === serializeToBase64(colList[editedIndex])
+                        ) {
+                            if (b4Doc) {
+                                colList[editedIndex] = b4Doc;
+                                updateSize(afDoc, b4Doc);
+                            } else {
+                                colList.splice(editedIndex, 1);
+                                updateSize(afDoc, undefined);
+                            }
+                        }
+                    }
+                } else if (
+                    b4Doc &&
+                    colList.findIndex(e => CompareBson.equal(e._id, b4Doc._id)) === -1
+                ) {
+                    colList.push(b4Doc);
+                    updateSize(undefined, b4Doc);
+                }
+            }
+            pathChanges.add(path);
         }
-        pathChanges.add(path);
     });
 
     return [...pathChanges];
@@ -560,7 +635,7 @@ const snipDocument = (data, find, config) => {
     if (!data || !config) return data;
     const { returnOnly, excludeFields } = config || {};
 
-    let output = { ...data };
+    let output = cloneDeep(data);
 
     if (returnOnly) {
         output = {};
@@ -619,7 +694,6 @@ const deserializeWriteValue = (value) => {
 }
 
 const deserializeNonAtomicWrite = (writeObj) => deserializeWriteValue(writeObj);
-
 
 const deserializeAtomicWrite = (b4Doc, writeObj, isNew, type) => {
     const resultantDoc = { ...b4Doc };

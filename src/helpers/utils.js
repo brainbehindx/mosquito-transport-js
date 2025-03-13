@@ -1,76 +1,74 @@
 import { ServerReachableListener, StoreReadyListener } from "./listeners";
-import { CACHE_PROTOCOL, CACHE_STORAGE_PATH, DEFAULT_CACHE_PASSWORD } from "./values";
+import { CACHE_STORAGE_PATH } from "./values";
 import { CacheStore, Scoped } from "./variables";
-import { decryptString, encryptString, serializeE2E } from "./peripherals";
+import { serializeE2E } from "./peripherals";
 import { deserializeBSON, serializeToBase64 } from "../products/database/bson";
 import { trySendPendingWrite } from "../products/database";
 import { deserialize } from "entity-serializer";
+import { purgeRedundantRecords } from "./purger";
 
-export const updateCacheStore = (timer = 300) => {
+export const updateCacheStore = (timer = 300, node) => {
     try { window } catch (_) { return; }
-    const {
-        cachePassword = DEFAULT_CACHE_PASSWORD,
-        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE,
-        io,
-        promoteCache
-    } = Scoped.ReleaseCacheData;
 
-    clearTimeout(Scoped.cacheStorageReducer);
-    Scoped.cacheStorageReducer = setTimeout(() => {
-        const { AuthStore, EmulatedAuth, PendingAuthPurge, DatabaseStore, PendingWrites, ...restStore } = CacheStore;
+    const { io, promoteCache } = Scoped.ReleaseCacheData;
 
-        const txt = encryptString(
-            JSON.stringify({
-                AuthStore,
-                EmulatedAuth,
-                PendingAuthPurge,
-                ...promoteCache ? {
-                    DatabaseStore: serializeToBase64(DatabaseStore),
-                    PendingWrites: serializeToBase64(PendingWrites)
-                } : {},
-                ...promoteCache ? restStore : {}
-            }),
-            cachePassword,
-            cachePassword
-        );
+    const doUpdate = async () => {
+        const {
+            AuthStore,
+            EmulatedAuth,
+            PendingAuthPurge,
+            DatabaseStore,
+            PendingWrites,
+            ...restStore
+        } = CacheStore;
+
+        const txt = JSON.stringify({
+            AuthStore,
+            EmulatedAuth,
+            PendingAuthPurge,
+            ...promoteCache ? {
+                DatabaseStore: serializeToBase64(DatabaseStore),
+                PendingWrites: serializeToBase64(PendingWrites)
+            } : {},
+            ...promoteCache ? restStore : {}
+        });
 
         if (io) {
-            io.output(txt);
-        } else if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
-            window.localStorage.setItem(CACHE_STORAGE_PATH, txt);
-        }
-    }, timer);
+            io.output(txt, node);
+        } else window.localStorage.setItem(CACHE_STORAGE_PATH, txt);
+    };
+
+    clearTimeout(Scoped.cacheStorageReducer);
+    if (timer) {
+        Scoped.cacheStorageReducer = setTimeout(doUpdate, timer);
+    } else doUpdate();
 };
 
 export const releaseCacheStore = async (builder) => {
     try { window } catch (_) { return; }
-    const {
-        cachePassword = DEFAULT_CACHE_PASSWORD,
-        cacheProtocol = CACHE_PROTOCOL.LOCAL_STORAGE,
-        io
-    } = builder;
+    const { io } = builder;
 
-    let txt;
+    let data = {};
 
-    if (io) {
-        txt = await io.input();
-    } else if (cacheProtocol === CACHE_PROTOCOL.LOCAL_STORAGE) {
-        txt = window.localStorage.getItem(CACHE_STORAGE_PATH);
+    try {
+        if (io) {
+            data = await io.input();
+        } else data = window.localStorage.getItem(CACHE_STORAGE_PATH);
+        data = JSON.parse(data || '{}');
+        await purgeRedundantRecords(data, builder);
+    } catch (error) {
+        console.error('releaseCacheStore err:', error);
     }
 
-    const j = JSON.parse(decryptString(txt || '', cachePassword, cachePassword) || '{}');
-    const projectList = new Set([]);
-
-    Object.entries(j).forEach(([k, v]) => {
+    Object.entries(data).forEach(([k, v]) => {
         if (['DatabaseStore', 'PendingWrites'].includes(k)) {
             CacheStore[k] = deserializeBSON(v);
         } else CacheStore[k] = v;
-        projectList.add(k);
     });
     Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
         Scoped.AuthJWTToken[key] = value?.token;
     });
-    projectList.forEach(projectUrl => {
+    Object.keys(CacheStore.PendingWrites).forEach(projectUrl => {
         if (Scoped.IS_CONNECTED[projectUrl])
             trySendPendingWrite(projectUrl);
     });
