@@ -3,7 +3,7 @@ import { ServerReachableListener } from "./listeners";
 import aes_pkg from 'crypto-js/aes.js';
 import Utf8Encoder from 'crypto-js/enc-utf8.js';
 import naclPkg from 'tweetnacl-functional';
-import getLodash from "lodash.get";
+import getLodash from "lodash/get";
 import e2e_worker from "./e2e_worker";
 import { deserialize, serialize } from "entity-serializer";
 

@@ -1,7 +1,7 @@
 import EngineApi from "../../helpers/engine_api";
-import { encodeBinary } from "../../helpers/peripherals";
+import { deserializeE2E } from "../../helpers/peripherals";
 import { Scoped } from "../../helpers/variables";
-import { awaitReachableServer, buildFetchInterface } from "../../helpers/utils";
+import { awaitReachableServer, buildFetchInterface, buildFetchResult } from "../../helpers/utils";
 import { awaitRefreshToken } from "../auth/accessor";
 import { Buffer } from "buffer";
 import { simplifyError } from "simplify-error";
@@ -75,7 +75,6 @@ export class MTStorage {
                 hasFinished = true;
                 onComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
             });
-            xhr.setRequestHeader('Authorization', `Bearer ${encodeBinary(accessKey)}`);
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.setRequestHeader('Content-Type', 'buffer/upload');
             if (Scoped.AuthJWTToken[projectUrl])
@@ -99,16 +98,25 @@ export class MTStorage {
     deleteFolder = (path) => deleteContent(this.builder, path, true);
 }
 
+const { _deleteFile, _deleteFolder } = EngineApi;
+
 const deleteContent = async (builder, path, isFolder) => {
-    const { projectUrl, accessKey, uglify } = builder;
+    const { projectUrl, uglify, extraHeaders, serverE2E_PublicKey } = builder;
 
     try {
-        const r = await (await fetch(
-            EngineApi[isFolder ? '_deleteFolder' : '_deleteFile'](projectUrl, uglify),
-            await buildFetchInterface({ path }, accessKey, Scoped.AuthJWTToken[projectUrl], 'DELETE')
-        )).json();
-        if (r.simpleError) throw r;
-        if (r.status !== 'success') throw 'operation not successful';
+        const [reqBuilder, [privateKey]] = await buildFetchInterface({
+            method: 'DELETE',
+            authToken: Scoped.AuthJWTToken[projectUrl],
+            body: { path },
+            extraHeaders,
+            serverE2E_PublicKey,
+            uglify
+        });
+
+        const data = await buildFetchResult(await fetch((isFolder ? _deleteFolder : _deleteFile)(projectUrl, uglify), reqBuilder), uglify);
+        const result = uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data;
+
+        if (result.status !== 'success') throw 'operation not successful';
     } catch (e) {
         if (e?.simpleError) throw e.simpleError;
         throw simplifyError('unexpected_error', `${e}`).simpleError;

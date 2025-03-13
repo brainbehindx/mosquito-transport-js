@@ -1,18 +1,18 @@
 import { deserializeE2E, listenReachableServer, serializeE2E } from "./helpers/peripherals";
 import { awaitStore, releaseCacheStore } from "./helpers/utils";
 import { CacheStore, Scoped } from "./helpers/variables";
-import { MTCollection, batchWrite, trySendPendingWrite } from "./products/database";
+import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener, TokenRefreshListener } from "./helpers/listeners";
 import { initTokenRefresher, listenToken, listenTokenReady, parseToken, triggerAuthToken } from "./products/auth/accessor";
-import { TIMESTAMP, DOCUMENT_EXTRACTION, FIND_GEO_JSON, GEO_JSON } from "./products/database/types";
+import { TIMESTAMP, DOCUMENT_EXTRACTION, FIND_GEO_JSON, GEO_JSON, TIMESTAMP_OFFSET } from "./products/database/types";
 import { mfetch } from "./products/http_callable";
 import { io } from "socket.io-client";
 import { AUTH_PROVIDER_ID, CACHE_PROTOCOL } from "./helpers/values";
 import EngineApi from './helpers/engine_api';
 import { Validator } from 'guard-object';
 import sendMessage from "./helpers/broadcaster";
-import cloneDeep from 'lodash.clonedeep';
+import cloneDeep from 'lodash/cloneDeep';
 import { Buffer } from 'buffer';
 import MTAuth, { purgePendingToken } from './products/auth';
 
@@ -151,6 +151,9 @@ export class MosquitoTransport {
     });
 
     collection = (path) => new MTCollection({ ...this.config, path });
+
+    onConnect = () => onCollectionConnect({ ...this.config });
+
     batchWrite = (map, configx) => batchWrite({ ...this.config }, map, configx);
     auth = () => new MTAuth({ ...this.config });
     storage = () => new MTStorage({ ...this.config });
@@ -159,7 +162,7 @@ export class MosquitoTransport {
 
     getSocket = (configOpts) => {
         const { disableAuth, authHandshake } = configOpts || {};
-        const { projectUrl, uglify, accessKey, serverE2E_PublicKey, wsPrefix, extraHeaders } = this.config;
+        const { projectUrl, uglify, serverE2E_PublicKey, wsPrefix, extraHeaders } = this.config;
 
         const restrictedRoute = [
             _listenCollection,
@@ -266,7 +269,7 @@ export class MosquitoTransport {
         const init = async () => {
             if (hasCancelled) return;
             const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
-            const [reqBuilder, [privateKey]] = uglify ? await serializeE2E({ accessKey, a_extras: authHandshake }, mtoken, serverE2E_PublicKey) : [null, []];
+            const [reqBuilder, [privateKey]] = uglify ? await serializeE2E({ a_extras: authHandshake }, mtoken, serverE2E_PublicKey) : [null, []];
 
             socket = io(`${wsPrefix}://${projectUrl.split('://')[1]}`, {
                 transports: ['websocket', 'polling', 'flashsocket'],
@@ -276,8 +279,7 @@ export class MosquitoTransport {
                     e2e: reqBuilder.toString('base64')
                 } : {
                     ...mtoken ? { mtoken } : {},
-                    a_extras: authHandshake,
-                    accessKey
+                    a_extras: authHandshake
                 }
             });
             clientPrivateKey = privateKey;
@@ -431,14 +433,11 @@ const validator = {
     projectUrl: (v) => {
         if (typeof v !== 'string' || (!Validator.HTTPS(v) && !Validator.HTTP(v)))
             throw `Expected "projectUrl" to be valid https or http link but got "${v}"`;
+        if (v.endsWith('/')) throw '"projectUrl" must not end with a trailing slash "/"';
     },
     disableCache: (v) => {
         if (typeof v !== 'boolean')
             throw `Invalid value supplied to disableCache, value must be a boolean`;
-    },
-    accessKey: (v) => {
-        if (typeof v !== 'string' || !v.trim())
-            throw `Invalid value supplied to accessKey, value must be a non-empty string`;
     },
     maxRetries: (v) => {
         if (v <= 0 || !Validator.POSITIVE_INTEGER(v))
@@ -462,7 +461,7 @@ const validator = {
     },
     extraHeaders: v => {
         if (!Validator.OBJECT(v)) throw '"extraHeaders" must be an object';
-        const reservedHeaders = ['mtoken', 'mosquito-token', 'init-content-type', 'content-type', 'authorization', 'uglified'];
+        const reservedHeaders = ['mtoken', 'mosquito-token', 'init-content-type', 'content-type', 'uglified'];
 
         Object.entries(v).forEach(([k, v]) => {
             if (typeof v !== 'string') throw `expected a string at extraHeaders.${k} but got "${v}"`;
@@ -484,12 +483,12 @@ const validateMTConfig = (config, that) => {
     if (config.enableE2E_Encryption && !config.serverE2E_PublicKey)
         throw '"serverE2E_PublicKey" is missing, enabling end-to-end encryption requires a public encryption key from the server';
     if (!config.projectUrl) throw `projectUrl is a required property in ${that.constructor.name}() constructor`;
-    if (!config.accessKey) throw `accessKey is a required property in ${that.constructor.name}() constructor`;
 }
 
 export {
     DoNotEncrypt,
     TIMESTAMP,
+    TIMESTAMP_OFFSET,
     DOCUMENT_EXTRACTION,
     FIND_GEO_JSON,
     GEO_JSON,
