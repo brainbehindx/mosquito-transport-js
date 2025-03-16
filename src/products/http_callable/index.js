@@ -49,7 +49,8 @@ export const mfetch = async (input = '', init, config) => {
     const isLink = Validator.LINK(input);
     const isBaseUrl = isLink || rawApproach;
     const disableAuth = method?.disableAuth || isBaseUrl;
-    const shouldCache = (retrieval !== RETRIEVAL.DEFAULT || (config.disableCache === undefined ? body === undefined : !disableCache)) &&
+    const hasBody = body !== undefined;
+    const shouldCache = (retrieval !== RETRIEVAL.DEFAULT || (config.disableCache === undefined ? !hasBody : !disableCache)) &&
         ![RETRIEVAL.NO_CACHE_NO_AWAIT, RETRIEVAL.NO_CACHE_AWAIT].includes(retrieval);
     const uglified = !!(!isBaseUrl && uglify);
 
@@ -137,17 +138,17 @@ export const mfetch = async (input = '', init, config) => {
 
             const mtoken = Scoped.AuthJWTToken[projectUrl];
             const initType = rawHeader['content-type'];
+            const encodeBody = initType === undefined && hasBody && !isBaseUrl;
 
             const [reqBuilder, [privateKey]] = uglified ? await serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
 
             const f = await fetch(isLink ? input : `${projectUrl}/${normalizeRoute(input)}`, {
-                ...(!isBaseUrl || body) ? { method: 'POST' } : {},
+                ...(!isBaseUrl || hasBody) ? { method: 'POST' } : {},
                 ...init,
-                ...uglified ? { body: reqBuilder } : {},
+                ...uglified ? { body: reqBuilder } : encodeBody ? { body: serialize(body) } : {},
                 // cache: 'no-cache',
                 headers: {
                     ...extraHeaders,
-                    ...isBaseUrl ? {} : { 'content-type': 'application/json' },
                     ...rawHeader,
                     ...uglified ? {
                         uglified,

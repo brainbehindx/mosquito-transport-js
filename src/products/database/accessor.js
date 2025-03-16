@@ -96,7 +96,7 @@ export const insertRecord = async (builder, config, accessIdWithoutLimit, value,
 export const getRecord = async (builder, accessIdWithoutLimit, episode = 0) => {
     await awaitStore();
     const { projectUrl, dbUrl, dbName, path, command } = builder;
-    const { limit, sort, direction, random } = command;
+    const { limit, sort, direction, random, findOne } = command;
     const isEpisode = episode === 1;
 
     const transformData = (data) => {
