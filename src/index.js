@@ -21,7 +21,8 @@ const {
     _listenDocument,
     _startDisconnectWriteTask,
     _cancelDisconnectWriteTask,
-    _listenUserVerification
+    _listenUserVerification,
+    _areYouOk
 } = EngineApi;
 
 // https://socket.io/docs/v3/emit-cheatsheet/#reserved-events
@@ -73,12 +74,9 @@ export class MosquitoTransport {
                     _from_base: true
                 }
             });
-
-            socket.on('_signal_signout', () => {
-                this.auth().signOut();
-            });
-
-            socket.on('connect', () => {
+            let connectionIte = 0;
+            const onConnect = () => {
+                ++connectionIte;
                 isConnected = true;
                 Scoped.IS_CONNECTED[projectUrl] = true;
                 if (queuedToken) updateMountedToken(queuedToken.token);
@@ -86,12 +84,33 @@ export class MosquitoTransport {
                 awaitStore().then(() => {
                     trySendPendingWrite(projectUrl);
                 });
-            });
-
-            socket.on('disconnect', () => {
+            };
+            const onDisconnect = () => {
+                ++connectionIte;
                 isConnected = false;
                 Scoped.IS_CONNECTED[projectUrl] = false;
                 ServerReachableListener.dispatch(projectUrl, false);
+            }
+
+            const manualCheckConnection = () => {
+                const ref = ++connectionIte;
+                fetch(_areYouOk(projectUrl), { cache: 'no-cache', credentials: 'omit' }).then(async r => {
+                    if ((await r.json()).status === 'yes') {
+                        if (ref === connectionIte) onConnect();
+                    } else throw null;
+                }).catch(() => {
+                    if (ref === connectionIte) onDisconnect();
+                });
+            }
+            manualCheckConnection();
+
+            socket.on('_signal_signout', () => {
+                this.auth().signOut();
+            });
+
+            socket.on('connect', onConnect);
+            socket.on('disconnect', () => {
+                manualCheckConnection();
             });
 
             const updateMountedToken = (token) => {
@@ -189,8 +208,11 @@ export class MosquitoTransport {
             socketListenerList = [],
             socketListenerIte = 0;
 
+        /**
+         * @type {import('socket.io-client').Socket}
+         */
+        let socket;
         let hasCancelled,
-            socket,
             tokenListener,
             clientPrivateKey;
 
@@ -315,7 +337,7 @@ export class MosquitoTransport {
                 lastTokenStatus = status || false;
             }, projectUrl);
         }
-
+        // TODO: disconnected
         return {
             timeout: (timeout) => {
                 if (timeout !== undefined && !Validator.POSITIVE_INTEGER(timeout))
@@ -460,7 +482,7 @@ const ConfigValidator = {
     },
     extraHeaders: v => {
         if (!Validator.OBJECT(v)) throw '"extraHeaders" must be an object';
-        const reservedHeaders = ['mtoken', 'mosquito-token', 'init-content-type', 'content-type', 'uglified'];
+        const reservedHeaders = ['mtoken', 'mosquito-token', 'init-content-type', 'content-type', 'uglified', 'entity-encoded'];
 
         Object.entries(v).forEach(([k, v]) => {
             if (typeof v !== 'string') throw `expected a string at extraHeaders.${k} but got "${v}"`;

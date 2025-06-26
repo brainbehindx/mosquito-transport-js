@@ -420,7 +420,7 @@ interface DocumentWriteValue {
 
 interface MTAuth {
     customSignin: (email: string, password: string) => Promise<SigninResult>;
-    customSignup: (email: string, password: string, name?: string, metadata?: Object) => Promise<SigninResult>;
+    customSignup: (email: string, password: string, name?: string, metadata?: Object) => Promise<SignupResult>;
     googleSignin: (token: string) => Promise<SignupResult>;
     appleSignin: () => Promise<SignupResult>;
     facebookSignin: () => Promise<SignupResult>;
@@ -526,7 +526,7 @@ interface DownloadProgressStats {
 }
 
 interface UploadProgressStats {
-    sentBtyes: number;
+    sentBytes: number;
     totalBytes: number;
 }
 

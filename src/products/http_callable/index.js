@@ -126,8 +126,11 @@ export const mfetch = async (input = '', init, config) => {
                     Scoped.PendingFetchCollective[processReqId] = [];
                 }
 
-                const reqData = await getFetchResources(projectUrl, reqId);
-                if (retrieval.startsWith('sticky') && reqData) {
+                let reqData;
+                if (
+                    retrieval.startsWith('sticky') &&
+                    (reqData = await getFetchResources(projectUrl, reqId))
+                ) {
                     resolveCache(reqData);
                     if (retrieval !== RETRIEVAL.STICKY_RELOAD) return;
                 }
@@ -144,6 +147,7 @@ export const mfetch = async (input = '', init, config) => {
 
             const f = await fetch(isLink ? input : `${projectUrl}/${normalizeRoute(input)}`, {
                 ...(!isBaseUrl || hasBody) ? { method: 'POST' } : {},
+                credentials: 'omit',
                 ...init,
                 ...uglified ? { body: reqBuilder } : encodeBody ? { body: serialize(body) } : {},
                 // cache: 'no-cache',
@@ -155,7 +159,7 @@ export const mfetch = async (input = '', init, config) => {
                         'content-type': 'request/buffer',
                         ...initType ? { 'init-content-type': initType } : {}
                     } : encodeBody
-                        ? { 'content-type': 'request/buffer' }
+                        ? { 'content-type': 'request/buffer', 'entity-encoded': '1' }
                         : {},
                     ...(disableAuth || !mtoken || uglified || isBaseUrl) ? {} : { mtoken }
                 }

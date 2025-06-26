@@ -43,7 +43,7 @@ export class MTStorage {
                 return () => { };
             }
 
-            const { projectUrl, accessKey, uglify } = this.builder;
+            const { projectUrl, uglify, extraHeaders } = this.builder;
             xhr = new XMLHttpRequest();
 
             if (awaitServer) await awaitReachableServer(projectUrl);
@@ -51,7 +51,7 @@ export class MTStorage {
 
             xhr.open('POST', EngineApi._uploadFile(projectUrl, uglify), true);
             xhr.upload.addEventListener('progress', e => {
-                onProgress?.({ sentBtyes: e.loaded, totalBytes: e.total });
+                onProgress?.({ sentBytes: e.loaded, totalBytes: e.total });
             });
             xhr.addEventListener('load', () => {
                 if (hasFinished || hasCancelled) return;
@@ -75,12 +75,17 @@ export class MTStorage {
                 hasFinished = true;
                 onComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
             });
-            xhr.setRequestHeader('Accept', 'application/json');
+
+            Object.entries(extraHeaders || {}).forEach(([k, v]) => {
+                xhr.setRequestHeader(k, v);
+            });
+
             xhr.setRequestHeader('Content-Type', 'buffer/upload');
             if (Scoped.AuthJWTToken[projectUrl])
                 xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);
             if (createHash) xhr.setRequestHeader('hash-upload', 'yes');
             xhr.setRequestHeader('Mosquito-Destination', destination);
+            xhr.withCredentials = false;
             xhr.send(fileStream || buffer);
         })();
 
