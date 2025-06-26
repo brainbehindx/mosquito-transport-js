@@ -337,8 +337,8 @@ export class MosquitoTransport {
                 lastTokenStatus = status || false;
             }, projectUrl);
         }
-        // TODO: disconnected
-        return {
+
+        const resultant = {
             timeout: (timeout) => {
                 if (timeout !== undefined && !Validator.POSITIVE_INTEGER(timeout))
                     throw `expected a positive integer for timeout but got ${timeout}`;
@@ -394,7 +394,17 @@ export class MosquitoTransport {
                 if (socket) socket.close();
                 socketListenerList = [];
             }
-        }
+        };
+
+        Object.defineProperty(resultant, 'disconnected', {
+            get() {
+                return socket.disconnected;
+            },
+            enumerable: true,
+            configurable: false
+        });
+
+        return resultant;
     }
 };
 
