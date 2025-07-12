@@ -443,7 +443,7 @@ const validateReleaseCacheProp = (prop) => {
                         throw `Invalid value supplied to "io.${k}", expected a function but got "${v}"`;
                 } else throw `Unexpected property named "io.${k}"`;
             });
-            if (!v?.input && !v?.output) throw '"input" and "output" are required when "io" is provided';
+            if (!v?.input || !v?.output) throw '"input" and "output" are required when "io" is provided';
         } else if (k === 'cacheProtocol') {
             if (![undefined, 'local-storage', 'indexed-db'].includes(v))
                 throw `cacheProtocol must be either 'local-storage' or 'indexed-db'`;

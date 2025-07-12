@@ -23,9 +23,17 @@ broadcaster.onmessage = async (e) => {
     } else if (kind === 'database-sync') {
         // only if cache protocol is in-memory
         const { builder, result, writeId } = data;
-        const { editions, pathChanges } = syncCache(builder, deserializeBSON(result)._);
-        Scoped.broadcastedWrites[writeId] = { editions, builder };
-        notifyDatabaseNodeChanges(builder, pathChanges);
+
+        const newBuilder = {
+            ...Scoped.InitializedProject[builder.projectUrl],
+            ...builder,
+            find: deserializeBSON(builder.find, false)._
+        };
+        result.value = deserializeBSON(result.value, false)._;
+
+        const { editions, pathChanges } = syncCache(newBuilder, result);
+        Scoped.broadcastedWrites[writeId] = { editions, builder: newBuilder };
+        notifyDatabaseNodeChanges(newBuilder, pathChanges);
     } else if (kind === 'database-revert') {
         // only if cache protocol is in-memory
         const { writeId, revert } = data;

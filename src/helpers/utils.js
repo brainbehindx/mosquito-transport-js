@@ -7,6 +7,7 @@ import { deserialize } from "entity-serializer";
 import { breakDbMap, purgeRedundantRecords } from "./purger";
 import { getCoreDB, resolveIDBRequest } from "./fs_manager";
 import cloneDeep from "lodash/cloneDeep";
+import { Buffer } from "buffer";
 
 const CacheKeys = Object.keys(CacheStore);
 
@@ -30,8 +31,21 @@ const getBaseDb = () =>
         r.target.result.createObjectStore('main', { keyPath: 'id' });
     });
 
+const prefillFetcher = (store, encode) => {
+    store = cloneDeep(store);
+    Object.values(store).forEach(accessIdObj => {
+        Object.values(accessIdObj).forEach(value => {
+            value.data.buffer = encode ?
+                Buffer.from(value.data.buffer).toString('base64')
+                : Buffer.from(value.data.buffer, 'base64');
+        });
+    });
+    return store;
+}
+
 export const updateCacheStore = async (node) => {
     try { window } catch (_) { return; }
+    node = node && node.filter((v, i, a) => a.indexOf(v) === i);
 
     const { io, promoteCache, isMemory } = Scoped.ReleaseCacheData;
 
@@ -41,6 +55,7 @@ export const updateCacheStore = async (node) => {
         PendingAuthPurge,
         DatabaseStore,
         PendingWrites,
+        FetchedStore,
         ...restStore
     } = CacheStore;
 
@@ -61,7 +76,8 @@ export const updateCacheStore = async (node) => {
             PendingAuthPurge,
             ...promoteCache ? {
                 DatabaseStore: prefillDatastore(DatabaseStore, DatastoreParser.encode),
-                PendingWrites: minimizePendingWrite()
+                PendingWrites: minimizePendingWrite(),
+                FetchedStore: prefillFetcher(FetchedStore, true)
             } : {},
             ...promoteCache ? restStore : {}
         });
@@ -99,6 +115,7 @@ export const releaseCacheStore = async (builder) => {
     const { io, isMemory } = builder;
 
     let data = {};
+    const tobePurged = [];
 
     try {
         if (isMemory) {
@@ -111,6 +128,8 @@ export const releaseCacheStore = async (builder) => {
                     data.DatabaseStore,
                     r => DatastoreParser.decode(r, false)
                 );
+            if (data.FetchedStore)
+                data.FetchedStore = prefillFetcher(data.FetchedStore, false);
         } else {
             const { db } = await getBaseDb();
             const tx = db.transaction('main', 'readonly');
@@ -124,7 +143,9 @@ export const releaseCacheStore = async (builder) => {
             );
             db.close();
         }
-        await purgeRedundantRecords(data, builder);
+        await purgeRedundantRecords(data, builder, purgeNodes => {
+            tobePurged.push(...purgeNodes);
+        });
     } catch (e) {
         console.error('releaseCacheStore data err:', e);
     }
@@ -137,6 +158,9 @@ export const releaseCacheStore = async (builder) => {
     });
     Scoped.IsStoreReady = true;
     StoreReadyListener.dispatch('_', 'ready');
+    setTimeout(() => {
+        if (tobePurged.length) updateCacheStore(tobePurged);
+    }, 0);
 };
 
 export const getPrefferTime = () => Date.now() + (Scoped.serverTimeOffset || 0);
