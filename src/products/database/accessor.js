@@ -8,7 +8,6 @@ import { BSONRegExp, ObjectId, Timestamp } from "bson";
 import { niceGuard, Validator } from "guard-object";
 import { TIMESTAMP } from "./types";
 import { docSize, incrementDatabaseSize } from "./counter";
-import { serializeToBase64 } from "./bson";
 import sendMessage from "../../helpers/broadcaster";
 import { DatastoreParser, serializeToBase64 } from "./bson";
 import { FS_PATH, getSystem, useFS } from "../../helpers/fs_manager";
@@ -440,7 +439,7 @@ export const addPendingWrites = async (builder, writeId, result) => {
     updateCacheStore(['DatabaseStore', 'PendingWrites', 'DatabaseStats']);
     notifyDatabaseNodeChanges(builder, [...pathChanges]);
     sendMessage('database-sync', {
-        builder: pureBuilder,
+        builder: { ...pureBuilder, projectUrl },
         writeId,
         result: pendingSnapshot
     });
@@ -720,7 +719,7 @@ export const removePendingWrite = async (builder, writeId, revert) => {
     const pendingData = grab(CacheStore.PendingWrites, [projectUrl, writeId]);
     if (!pendingData) return;
 
-    const pathChanges = revert ? revertChanges(builder, pendingData.editions) : [];
+    const pathChanges = revert ? await revertChanges(builder, pendingData.editions) : [];
 
     unpoke(CacheStore.PendingWrites, [projectUrl, writeId]);
     updateCacheStore(['PendingWrites', 'DatabaseStore', 'DatabaseStats']);

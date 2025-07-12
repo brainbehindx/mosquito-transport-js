@@ -22,4 +22,5 @@
 - serverTimeOffset
 - avoid sending cookies ✅
 - test indexed-db
+- sychronize pending writes
 <!-- - error: "refreshToken retry limit exceeded" <--- no need -->
