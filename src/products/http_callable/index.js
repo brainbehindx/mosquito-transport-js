@@ -11,9 +11,9 @@ import { serialize } from "entity-serializer";
 import { getFetchResources, insertFetchResources } from "./accessor";
 
 const buildFetchData = (data, extras) => {
-    const { ok, type, status, statusText, redirected, url, headers, size, base64 } = data;
+    const { ok, type, status, statusText, redirected, url, headers, size, buffer } = data;
 
-    const response = new Response(Buffer.from(base64, 'base64'), {
+    const response = new Response(buffer, {
         headers: new Headers(headers),
         status,
         statusText,
@@ -110,7 +110,7 @@ export const mfetch = async (input = '', init, config) => {
 
         await awaitStore();
         const resolveCache = (reqData) => {
-            finalize(buildFetchData(reqData), { fromCache: true });
+            finalize(buildFetchData(reqData, { fromCache: true }));
         };
 
         try {
@@ -169,12 +169,12 @@ export const mfetch = async (input = '', init, config) => {
 
             if (!isLink && simple) throw { simpleError: JSON.parse(simple) };
 
-            const base64 = uglified ?
-                Buffer.from(await deserializeE2E(await f.arrayBuffer(), serverE2E_PublicKey, privateKey)).toString('base64') :
-                Buffer.from(await f.arrayBuffer()).toString('base64');
+            const buffer = uglified ?
+                Buffer.from(await deserializeE2E(await f.arrayBuffer(), serverE2E_PublicKey, privateKey)) :
+                Buffer.from(await f.arrayBuffer());
 
             const resObj = {
-                base64,
+                buffer,
                 type,
                 status,
                 statusText,

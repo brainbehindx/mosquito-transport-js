@@ -1,6 +1,5 @@
-import { encodeBinary } from './peripherals';
 
-export const CACHE_STORAGE_PATH = encodeBinary('MOSQUITO_TRANSPORT');
+export const CACHE_STORAGE_PATH = 'mosquito_base';
 
 export const RETRIEVAL = {
     STICKY: 'sticky',
@@ -15,7 +14,6 @@ export const RETRIEVAL = {
 
 export const DELIVERY = {
     DEFAULT: 'default',
-    CACHE_AWAIT: 'cache-await',
     CACHE_NO_AWAIT: 'cache-no-await',
     NO_CACHE_NO_AWAIT: 'no-cache-no-await',
     NO_CACHE_AWAIT: 'no-cache-await'

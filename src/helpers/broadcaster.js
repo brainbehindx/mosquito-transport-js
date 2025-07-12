@@ -6,7 +6,7 @@ import { awaitStore } from "./utils";
 import { CacheStore, Scoped } from "./variables";
 
 const InstanceID = `${Math.random()}`;
-const broadcaster = new BroadcastChannel('MT_BROADCASTER');
+const broadcaster = new BroadcastChannel('MOSQUITO_BROADCASTER');
 
 broadcaster.onmessage = async (e) => {
     const { kind, context, data } = JSON.parse(e.data);

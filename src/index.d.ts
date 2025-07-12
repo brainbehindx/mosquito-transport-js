@@ -94,6 +94,14 @@ type auth_provider_id_values = auth_provider_id['GOOGLE'] |
 
 interface ReleaseCacheOption {
     /**
+     * select the mechanism for storing data locally
+     * - local-storage: uses [localStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage) web api for storing data.
+     * - indexed-db: uses [indexedDb](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API) web api for storing data.
+     * 
+     * @default 'local-storage'
+     */
+    cacheProtocol?: 'local-storage' | 'indexed-db';
+    /**
      * local-storage is used as the default caching mechanism
      * 
      * providing `io` means you want to override this behaviour and handle caching yourself
@@ -286,7 +294,7 @@ interface FetchHttpConfig {
     rawApproach?: boolean;
 }
 
-type Delievery = 'default' | 'no-cache' | 'no-await' | 'no-await-no-cache' | 'await-no-cache' | 'cache-no-await';
+type Delievery = 'default' | 'cache-no-await' | 'no-cache-no-await' | 'no-cache-await';
 
 interface WriteConfig {
     /**
@@ -294,21 +302,9 @@ interface WriteConfig {
      */
     disableAuth?: boolean;
 
-    DEFAULT: 'default',
-    CACHE_AWAIT: 'cache-await',
-    CACHE_NO_AWAIT: 'cache-no-await',
-    NO_CACHE_NO_AWAIT: 'no-cache-no-await',
-    NO_CACHE_AWAIT: 'no-cache-await'
-
     /**
      * This property determines how the write will be dispatch to the remote server
      *  TODO:
-     * 
-     * `default`: 
-     * `cache-await`: 
-     * `cache-no-await`: 
-     * `no-cache-no-await`: 
-     * `no-cache-await`: 
      */
     delivery?: Delievery;
 }

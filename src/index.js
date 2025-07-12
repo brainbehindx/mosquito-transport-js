@@ -82,7 +82,7 @@ export class MosquitoTransport {
                 if (queuedToken) updateMountedToken(queuedToken.token);
                 ServerReachableListener.dispatch(projectUrl, true);
                 awaitStore().then(() => {
-                    trySendPendingWrite(projectUrl);
+                    if (isConnected) trySendPendingWrite(projectUrl);
                 });
             };
             const onDisconnect = () => {
@@ -152,8 +152,9 @@ export class MosquitoTransport {
     static initializeCache(prop) {
         if (Scoped.ReleaseCacheData) throw `calling ${this.name}() multiple times is prohibited`;
         validateReleaseCacheProp({ ...prop });
-        Scoped.ReleaseCacheData = { ...prop };
-        releaseCacheStore({ ...prop });
+        const { io, cacheProtocol } = prop;
+        Scoped.ReleaseCacheData = { ...prop, isMemory: !!io || ['local-storage', undefined].includes(cacheProtocol) };
+        releaseCacheStore({ ...Scoped.ReleaseCacheData });
         // purge residue tokens
         awaitStore().then(() => {
             Object.keys(CacheStore.PendingAuthPurge).forEach(k => {
@@ -443,6 +444,9 @@ const validateReleaseCacheProp = (prop) => {
                 } else throw `Unexpected property named "io.${k}"`;
             });
             if (!v?.input && !v?.output) throw '"input" and "output" are required when "io" is provided';
+        } else if (k === 'cacheProtocol') {
+            if (![undefined, 'local-storage', 'indexed-db'].includes(v))
+                throw `cacheProtocol must be either 'local-storage' or 'indexed-db'`;
         } else if (k === 'promoteCache') {
             if (typeof v !== 'boolean') throw 'promoteCache should be a boolean';
         } else if (['maxLocalDatabaseSize', 'maxLocalFetchHttpSize'].includes(k)) {

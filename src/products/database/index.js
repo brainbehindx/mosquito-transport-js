@@ -2,7 +2,7 @@ import { io } from "socket.io-client";
 import EngineApi from "../../helpers/engine_api";
 import { DatabaseRecordsListener } from "../../helpers/listeners";
 import { deserializeE2E, listenReachableServer, niceTry, serializeE2E } from "../../helpers/peripherals";
-import { awaitStore, buildFetchInterface, buildFetchResult, getReachableServer } from "../../helpers/utils";
+import { awaitStore, buildFetchInterface, buildFetchResult, getReachableServer, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
 import { addPendingWrites, generateRecordID, getCountQuery, getRecord, insertCountQuery, insertRecord, listenQueryEntry, removePendingWrite, validateWriteValue } from "./accessor";
 import { validateCollectionName, validateFilter, validateFindConfig, validateFindObject, validateListenFindConfig } from "./validator";
@@ -395,8 +395,9 @@ const countCollection = async (builder, config) => {
             const b4Data = await getCountQuery(builder, accessId).catch(() => null);
 
             if (e?.simpleError) {
+                e.simpleError.ack = true;
                 finalize(undefined, e.simpleError);
-            } else if (!disableCache && !Validator.NUMBER(b4Data)) {
+            } else if (!disableCache && Validator.NUMBER(b4Data)) {
                 finalize(b4Data);
             } else if (retries > maxRetries) {
                 finalize(undefined, { error: 'retry_limit_exceeded', message: `retry exceed limit(${maxRetries})` });
@@ -552,6 +553,7 @@ const findObject = async (builder, config) => {
                 (thisRecord = [await getRecordData()])[0];
 
             if (e?.simpleError) {
+                e.simpleError.ack = true;
                 finalize(undefined, e?.simpleError);
             } else if (
                 (retrieval === RETRIEVAL.CACHE_NO_AWAIT && !(await getThisRecord())) ||
@@ -622,13 +624,14 @@ const commitData = async (builder, value, type, config) => {
     const writeId = `${Date.now() + ++Scoped.PendingIte}`;
     const isBatchWrite = type === 'batchWrite';
     const shouldCache = (delivery !== DELIVERY.DEFAULT || !disableCache) &&
-        ![DELIVERY.NO_CACHE_AWAIT, DELIVERY.NO_CACHE_NO_AWAIT].includes();
+        ![DELIVERY.NO_CACHE_AWAIT, DELIVERY.NO_CACHE_NO_AWAIT].includes(delivery);
 
     await awaitStore();
     if (shouldCache) {
-        await addPendingWrites(builder, writeId, { value, type, find, config });
+        await addPendingWrites(builder, writeId, { value, type, config: stripUndefined({ disableAuth, stepping }) });
         Scoped.OutgoingWrites[writeId] = true;
-        await Scoped.dispatchingWritesPromise;
+        if (Scoped.dispatchingWritesPromise[projectUrl])
+            await Scoped.dispatchingWritesPromise[projectUrl];
     }
 
     let retries = 0, hasFinalize;
@@ -649,10 +652,11 @@ const commitData = async (builder, value, type, config) => {
             } else reject(b);
             if (hasFinalize || !instantProcess) return;
             hasFinalize = true;
+            if (Scoped.OutgoingWrites[writeId])
+                delete Scoped.OutgoingWrites[writeId];
+
             if (shouldCache) {
                 if (removeCache) removePendingWrite(builder, writeId, revertCache);
-                if (Scoped.OutgoingWrites[writeId])
-                    delete Scoped.OutgoingWrites[writeId];
             }
         };
 
@@ -687,7 +691,8 @@ const commitData = async (builder, value, type, config) => {
         } catch (e) {
             if (e?.simpleError) {
                 console.error(`${type} error (${path}), ${e.simpleError?.message}`);
-                finalize(undefined, e?.simpleError, { removeCache: true, revertCache: true });
+                e.simpleError.ack = true;
+                finalize(undefined, e.simpleError, { removeCache: true, revertCache: true });
             } else if (delivery === DELIVERY.NO_CACHE_NO_AWAIT) {
                 finalize(undefined, simplifyCaughtError(e).simpleError);
             } else if (retries > maxRetries) {
@@ -717,9 +722,9 @@ const commitData = async (builder, value, type, config) => {
 };
 
 export const trySendPendingWrite = (projectUrl) => {
-    if (Scoped.dispatchingWritesPromise) return;
+    if (Scoped.dispatchingWritesPromise[projectUrl]) return;
 
-    Scoped.dispatchingWritesPromise = new Promise(async resolve => {
+    Scoped.dispatchingWritesPromise[projectUrl] = new Promise(async resolve => {
         const sortedWrite = Object.entries(CacheStore.PendingWrites[projectUrl] || {})
             .filter(([k]) => !Scoped.OutgoingWrites[k])
             .sort((a, b) => a[1].addedOn - b[1].addedOn);
@@ -727,12 +732,18 @@ export const trySendPendingWrite = (projectUrl) => {
 
         for (const [writeId, { snapshot, builder, attempts = 1 }] of sortedWrite) {
             try {
-                await commitData(builder, snapshot.value, snapshot.type, { ...snapshot.config, delivery: DELIVERY.NO_CACHE_NO_AWAIT });
+                await commitData(
+                    { ...Scoped.InitializedProject[projectUrl], ...builder, find: deserializeBSON(builder.find, true)._ },
+                    deserializeBSON(snapshot.value, true)._,
+                    snapshot.type,
+                    { ...snapshot.config, delivery: DELIVERY.NO_CACHE_NO_AWAIT }
+                );
+
                 delete CacheStore.PendingWrites[projectUrl][writeId];
                 ++resolveCounts;
-            } catch (_) {
+            } catch (err) {
                 const { maxRetries } = builder;
-                if (!maxRetries || attempts >= maxRetries) {
+                if (err?.ack || !maxRetries || attempts >= maxRetries) {
                     delete CacheStore.PendingWrites[projectUrl][writeId];
                     ++resolveCounts;
                 } else if (CacheStore.PendingWrites[projectUrl]?.[writeId]) {
@@ -741,7 +752,9 @@ export const trySendPendingWrite = (projectUrl) => {
             }
         }
         resolve();
-        Scoped.dispatchingWritesPromise = undefined;
+        Scoped.dispatchingWritesPromise[projectUrl] = undefined;
+        updateCacheStore(['PendingWrites']);
+
         if (
             (sortedWrite.length - resolveCounts) &&
             await getReachableServer(projectUrl)

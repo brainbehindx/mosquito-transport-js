@@ -1,9 +1,9 @@
 import { Buffer } from "buffer";
 import { ServerReachableListener } from "./listeners";
 import naclPkg from 'tweetnacl-functional';
-import getLodash from "lodash/get";
 import e2e_worker from "./e2e_worker";
 import { deserialize, serialize } from "entity-serializer";
+import { grab } from "poke-object";
 
 const { box, randomBytes } = naclPkg;
 
@@ -58,8 +58,8 @@ export const shuffleArray = (n) => {
 
 export function sortArrayByObjectKey(arr = [], key) {
     return arr.sort(function (a, b) {
-        const left = getLodash(a, key),
-            right = getLodash(b, key);
+        const left = grab(a, key),
+            right = grab(b, key);
 
         return (left > right) ? 1 : (left < right) ? -1 : 0;
     });
@@ -74,12 +74,8 @@ export async function niceHash(str = '') {
         // Use the Web Crypto API to compute the hash
         const hashBuffer = await crypto.subtle.digest('SHA-256', data);
 
-        // Convert the ArrayBuffer to a hex string for readability
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
-
         // Convert to base64
-        return Buffer.from(hashHex, 'hex').toString('base64');
+        return Buffer.from(new Uint8Array(hashBuffer)).toString('base64');
     } catch (_) {
         return str;
     }

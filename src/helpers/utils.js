@@ -2,33 +2,66 @@ import { ServerReachableListener, StoreReadyListener } from "./listeners";
 import { CACHE_STORAGE_PATH } from "./values";
 import { CacheStore, Scoped } from "./variables";
 import { serializeE2E } from "./peripherals";
-import { deserializeBSON, serializeToBase64 } from "../products/database/bson";
-import { trySendPendingWrite } from "../products/database";
+import { DatastoreParser } from "../products/database/bson";
 import { deserialize } from "entity-serializer";
-import { purgeRedundantRecords } from "./purger";
+import { breakDbMap, purgeRedundantRecords } from "./purger";
+import { getCoreDB, resolveIDBRequest } from "./fs_manager";
+import cloneDeep from "lodash/cloneDeep";
 
-export const updateCacheStore = (timer = 300, node) => {
+const CacheKeys = Object.keys(CacheStore);
+
+const prefillDatastore = (obj, caller) => {
+    obj = cloneDeep(obj);
+    breakDbMap(obj, (_projectUrl, _dbUrl, _dbName, _path, value) => {
+        Object.entries(value.instance).forEach(([access_id, obj]) => {
+            value.instance[access_id] = caller(obj);
+        });
+        Object.entries(value.episode).forEach(([_access_id, limitObj]) => {
+            Object.entries(limitObj).forEach(([limit, obj]) => {
+                limitObj[limit] = caller(obj);
+            });
+        });
+    });
+    return obj;
+};
+
+const getBaseDb = () =>
+    getCoreDB(`${CACHE_STORAGE_PATH}::center`, 1, r => {
+        r.target.result.createObjectStore('main', { keyPath: 'id' });
+    });
+
+export const updateCacheStore = async (node) => {
     try { window } catch (_) { return; }
 
-    const { io, promoteCache } = Scoped.ReleaseCacheData;
+    const { io, promoteCache, isMemory } = Scoped.ReleaseCacheData;
 
-    const doUpdate = async () => {
-        const {
-            AuthStore,
-            EmulatedAuth,
-            PendingAuthPurge,
-            DatabaseStore,
-            PendingWrites,
-            ...restStore
-        } = CacheStore;
+    const {
+        AuthStore,
+        EmulatedAuth,
+        PendingAuthPurge,
+        DatabaseStore,
+        PendingWrites,
+        ...restStore
+    } = CacheStore;
 
+    const minimizePendingWrite = () => {
+        const obj = cloneDeep(PendingWrites);
+        Object.values(obj).forEach(e => {
+            Object.values(e).forEach(b => {
+                if ('editions' in b) delete b.editions;
+            });
+        });
+        return obj;
+    }
+
+    if (isMemory) {
         const txt = JSON.stringify({
             AuthStore,
             EmulatedAuth,
             PendingAuthPurge,
             ...promoteCache ? {
-                DatabaseStore: serializeToBase64(DatabaseStore),
-                PendingWrites: serializeToBase64(PendingWrites)
+                DatabaseStore: prefillDatastore(DatabaseStore, DatastoreParser.encode),
+                PendingWrites: minimizePendingWrite()
             } : {},
             ...promoteCache ? restStore : {}
         });
@@ -36,41 +69,71 @@ export const updateCacheStore = (timer = 300, node) => {
         if (io) {
             io.output(txt, node);
         } else window.localStorage.setItem(CACHE_STORAGE_PATH, txt);
-    };
+        return;
+    } else {
+        // use indexed-db
+        const exclusion = ['DatabaseStore', 'DatabaseCountResult', 'FetchedStore'];
+        const updationKey = (node ? Array.isArray(node) ? node : [node] : CacheKeys).filter(v => !exclusion.includes(v));
 
-    clearTimeout(Scoped.cacheStorageReducer);
-    if (timer) {
-        Scoped.cacheStorageReducer = setTimeout(doUpdate, timer);
-    } else doUpdate();
+        if (!updationKey.length) return;
+        const { db } = await getBaseDb();
+        const tx = db.transaction('main');
+        const stores = tx.objectStore('main');
+
+        await Promise.all(
+            updationKey
+                .map(v => [v, v === 'PendingWrites' ? minimizePendingWrite() : CacheStore[v]])
+                .map(([ref, value]) =>
+                    resolveIDBRequest(stores.put({ id: ref, value }))
+                )
+        ).catch(err => {
+            console.error('updateCacheStore err:', err);
+        });
+        try { tx.commit(); } catch (_) { }
+        db.close();
+    }
 };
 
 export const releaseCacheStore = async (builder) => {
     try { window } catch (_) { return; }
-    const { io } = builder;
+    const { io, isMemory } = builder;
 
     let data = {};
 
     try {
-        if (io) {
-            data = await io.input();
-        } else data = window.localStorage.getItem(CACHE_STORAGE_PATH);
-        data = JSON.parse(data || '{}');
+        if (isMemory) {
+            if (io) {
+                data = await io.input();
+            } else data = window.localStorage.getItem(CACHE_STORAGE_PATH);
+            data = JSON.parse(data || '{}');
+            if (data.DatabaseStore)
+                data.DatabaseStore = prefillDatastore(
+                    data.DatabaseStore,
+                    r => DatastoreParser.decode(r, false)
+                );
+        } else {
+            const { db } = await getBaseDb();
+            const tx = db.transaction('main', 'readonly');
+            const stores = tx.objectStore('main');
+
+            const query = await resolveIDBRequest(stores.getAll());
+            data = Object.fromEntries(
+                query.map(({ id, value }) =>
+                    [id, value]
+                )
+            );
+            db.close();
+        }
         await purgeRedundantRecords(data, builder);
-    } catch (error) {
-        console.error('releaseCacheStore err:', error);
+    } catch (e) {
+        console.error('releaseCacheStore data err:', e);
     }
 
     Object.entries(data).forEach(([k, v]) => {
-        if (['DatabaseStore', 'PendingWrites'].includes(k)) {
-            CacheStore[k] = deserializeBSON(v);
-        } else CacheStore[k] = v;
+        CacheStore[k] = v;
     });
     Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
         Scoped.AuthJWTToken[key] = value?.token;
-    });
-    Object.keys(CacheStore.PendingWrites).forEach(projectUrl => {
-        if (Scoped.IS_CONNECTED[projectUrl])
-            trySendPendingWrite(projectUrl);
     });
     Scoped.IsStoreReady = true;
     StoreReadyListener.dispatch('_', 'ready');

@@ -9,7 +9,6 @@ export const Scoped = {
     ReleaseCacheData: undefined,
     IsStoreReady: false,
     AuthJWTToken: {},
-    cacheStorageReducer: undefined,
     TokenRefreshTimer: {},
     LastTokenRefreshRef: {},
     StorageProcessID: 0,
@@ -18,11 +17,13 @@ export const Scoped = {
     PendingDbReadCollective: {},
     ActiveDatabaseListeners: {},
     OutgoingWrites: {},
+    broadcastedWrites: {},
+    dispatchingWritesPromise: {},
     /**
-     * @type {Promise<any> | undefined}
+     * @type {{[key: string]: { promise: Promise<IDBDatabase> | undefined, ite: number, endPromise: Promise<void> | undefined }}}
      */
-    dispatchingWritesPromise: undefined,
-    broadcastedWrites: {}
+    chainedDbOperator: {},
+    linearDbOpenProcess: {}
 };
 
 export const CacheStore = {
@@ -46,6 +47,9 @@ export const CacheStore = {
     },
     AuthStore: {},
     PendingAuthPurge: {},
+    /**
+     * [the instance url]: the url been emulated
+     */
     EmulatedAuth: {},
     PendingWrites: {},
     FetchedStore: {}

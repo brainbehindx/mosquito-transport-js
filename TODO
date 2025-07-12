@@ -21,4 +21,5 @@
 - switch to events package
 - serverTimeOffset
 - avoid sending cookies ✅
+- test indexed-db
 <!-- - error: "refreshToken retry limit exceeded" <--- no need -->
