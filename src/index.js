@@ -15,6 +15,7 @@ import sendMessage from "./helpers/broadcaster";
 import cloneDeep from 'lodash/cloneDeep';
 import { Buffer } from 'buffer';
 import MTAuth, { purgePendingToken } from './products/auth';
+import { BSON } from "bson";
 
 const {
     _listenCollection,
@@ -527,5 +528,6 @@ export {
     DOCUMENT_EXTRACTION,
     FIND_GEO_JSON,
     GEO_JSON,
-    AUTH_PROVIDER_ID
+    AUTH_PROVIDER_ID,
+    BSON
 };

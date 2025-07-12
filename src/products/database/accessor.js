@@ -19,7 +19,7 @@ export const listenQueryEntry = (callback, { accessId, builder, config, processI
     const { projectUrl, dbName, dbUrl, path } = builder;
     const { episode = 0 } = config || {};
 
-    const nodeID = `${projectUrl}${dbName}${dbUrl}${path}`;
+    const nodeID = `${projectUrl}_${dbName}_${dbUrl}_${path}`;
 
     if (!Scoped.ActiveDatabaseListeners[nodeID])
         Scoped.ActiveDatabaseListeners[nodeID] = {};
@@ -794,7 +794,7 @@ export const notifyDatabaseNodeChanges = (builder, changedCollections = []) => {
     const { projectUrl, dbName, dbUrl } = builder;
 
     changedCollections.forEach(path => {
-        const nodeID = `${projectUrl}${dbName}${dbUrl}${path}`;
+        const nodeID = `${projectUrl}_${dbName}_${dbUrl}_${path}`;
         Object.entries(Scoped.ActiveDatabaseListeners[nodeID] || {})
             .sort((a, b) => a[1] - b[1])
             .forEach(([processId]) => {
