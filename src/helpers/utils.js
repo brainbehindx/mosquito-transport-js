@@ -6,13 +6,13 @@ import { DatastoreParser } from "../products/database/bson";
 import { deserialize } from "entity-serializer";
 import { breakDbMap, purgeRedundantRecords } from "./purger";
 import { getCoreDB, resolveIDBRequest } from "./fs_manager";
-import cloneDeep from "lodash/cloneDeep";
 import { Buffer } from "buffer";
+import { basicClone } from "./basic_clone";
 
 const CacheKeys = Object.keys(CacheStore);
 
 const prefillDatastore = (obj, caller) => {
-    obj = cloneDeep(obj);
+    obj = basicClone(obj);
     breakDbMap(obj, (_projectUrl, _dbUrl, _dbName, _path, value) => {
         Object.entries(value.instance).forEach(([access_id, obj]) => {
             value.instance[access_id] = caller(obj);
@@ -32,7 +32,7 @@ const getBaseDb = () =>
     });
 
 const prefillFetcher = (store, encode) => {
-    store = cloneDeep(store);
+    store = basicClone(store);
     Object.values(store).forEach(accessIdObj => {
         Object.values(accessIdObj).forEach(value => {
             value.data.buffer = encode ?
@@ -60,7 +60,7 @@ export const updateCacheStore = async (node) => {
     } = CacheStore;
 
     const minimizePendingWrite = () => {
-        const obj = cloneDeep(PendingWrites);
+        const obj = basicClone(PendingWrites);
         Object.values(obj).forEach(e => {
             Object.values(e).forEach(b => {
                 if ('editions' in b) delete b.editions;
@@ -210,7 +210,6 @@ export const buildFetchInterface = async ({ body, authToken, method, uglify, ser
 
     return [{
         body: uglify ? plate : body,
-        // cache: 'no-cache',
         headers: {
             ...extraHeaders,
             'Content-type': uglify ? 'request/buffer' : 'application/json',

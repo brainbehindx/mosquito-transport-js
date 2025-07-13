@@ -6,14 +6,14 @@ import { Scoped } from "../../helpers/variables";
 import { awaitRefreshToken } from "../auth/accessor";
 import { simplifyCaughtError } from "simplify-error";
 import { guardObject, Validator } from "guard-object";
-import cloneDeep from "lodash/cloneDeep";
 import { serialize } from "entity-serializer";
 import { getFetchResources, insertFetchResources } from "./accessor";
+import { basicClone } from "../../helpers/basic_clone";
 
 const buildFetchData = (data, extras) => {
     const { ok, type, status, statusText, redirected, url, headers, size, buffer } = data;
 
-    const response = new Response(buffer, {
+    const response = new Response(Buffer.from(buffer), {
         headers: new Headers(headers),
         status,
         statusText,
@@ -90,9 +90,9 @@ export const mfetch = async (input = '', init, config) => {
     const callFetch = () => new Promise(async (resolve, reject) => {
         const retryProcess = ++retries;
 
-        const finalize = (a, b) => {
-            if (a) resolve(a);
-            else reject(b);
+        const finalize = (a, b, extras) => {
+            if (a) resolve(buildFetchData(a, extras));
+            else reject(basicClone(b));
             if (hasFinalize || retryProcess !== 1) return;
             hasFinalize = true;
 
@@ -103,14 +103,14 @@ export const mfetch = async (input = '', init, config) => {
                     delete Scoped.PendingFetchCollective[processReqId];
 
                 resolutionList.forEach(e => {
-                    e(a, b);
+                    e(a && buildFetchData(a, extras), b && basicClone(b));
                 });
             }
         };
 
         await awaitStore();
         const resolveCache = (reqData) => {
-            finalize(buildFetchData(reqData, { fromCache: true }));
+            finalize(reqData, undefined, { fromCache: true });
         };
 
         try {
@@ -118,8 +118,8 @@ export const mfetch = async (input = '', init, config) => {
                 if (enableMinimizer) {
                     if (Scoped.PendingFetchCollective[processReqId]) {
                         Scoped.PendingFetchCollective[processReqId].push((a, b) => {
-                            if (a) resolve(cloneDeep(a.result));
-                            else reject(cloneDeep(b));
+                            if (a) resolve(a);
+                            else reject(b);
                         });
                         return;
                     }
@@ -146,11 +146,10 @@ export const mfetch = async (input = '', init, config) => {
             const [reqBuilder, [privateKey]] = uglified ? await serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
 
             const f = await fetch(isLink ? input : `${projectUrl}/${normalizeRoute(input)}`, {
-                ...(!isBaseUrl || hasBody) ? { method: 'POST' } : {},
+                ...hasBody ? { method: 'POST' } : {},
                 credentials: 'omit',
                 ...init,
                 ...uglified ? { body: reqBuilder } : encodeBody ? { body: serialize(body) } : {},
-                cache: 'no-cache',
                 headers: {
                     ...extraHeaders,
                     ...rawHeader,
@@ -189,7 +188,7 @@ export const mfetch = async (input = '', init, config) => {
 
             if (shouldCache) insertFetchResources(projectUrl, reqId, resObj);
 
-            finalize(buildFetchData(resObj));
+            finalize(resObj);
         } catch (e) {
             let thisRecord;
 

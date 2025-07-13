@@ -23,4 +23,5 @@
 - avoid sending cookies ✅
 - test indexed-db
 - sychronize pending writes
+- add timeout in fetchHttp
 <!-- - error: "refreshToken retry limit exceeded" <--- no need -->

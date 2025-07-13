@@ -12,10 +12,10 @@ import { AUTH_PROVIDER_ID } from "./helpers/values";
 import EngineApi from './helpers/engine_api';
 import { Validator } from 'guard-object';
 import sendMessage from "./helpers/broadcaster";
-import cloneDeep from 'lodash/cloneDeep';
 import { Buffer } from 'buffer';
 import MTAuth, { purgePendingToken } from './products/auth';
 import { BSON } from "bson";
+import { basicClone } from './helpers/basic_clone';
 
 const {
     _listenCollection,
@@ -58,7 +58,7 @@ export class MosquitoTransport {
             throw `initializeCache must be called before creating any ${this.constructor.name} instance`;
 
         if (!Scoped.InitializedProject[projectUrl]) {
-            Scoped.InitializedProject[projectUrl] = cloneDeep(this.config);
+            Scoped.InitializedProject[projectUrl] = basicClone(this.config);
             Scoped.LastTokenRefreshRef[projectUrl] = 0;
             triggerAuthToken(projectUrl);
             initTokenRefresher({ ...this.config }, true);
@@ -95,7 +95,7 @@ export class MosquitoTransport {
 
             const manualCheckConnection = () => {
                 const ref = ++connectionIte;
-                fetch(_areYouOk(projectUrl), { cache: 'no-cache', credentials: 'omit' }).then(async r => {
+                fetch(_areYouOk(projectUrl), { credentials: 'omit' }).then(async r => {
                     if ((await r.json()).status === 'yes') {
                         if (ref === connectionIte) onConnect();
                     } else throw null;
