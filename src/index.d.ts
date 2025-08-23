@@ -235,6 +235,7 @@ interface MTCollection {
     });
     count: (config?: CountConfig) => Promise<number>;
     get: (config?: GetConfig) => Promise<DocumentResult[]>;
+    // TODO: change GetConfig for this listen
     listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
     findOne: (findOne?: DocumentFind) => ({
         get: (config?: GetConfig) => Promise<DocumentResult>;
@@ -385,6 +386,12 @@ interface GetConfig {
      * To learn and see more examples on this, Please visit https://brainbehindx.com/mosquito-transport/docs/reading_data/retrieval
      */
     disableMinimizer?: boolean;
+    onWaiting: (intruder: WaitingIntruder) => void | Promise<void>;
+}
+
+interface WaitingIntruder {
+    resolve?: undefined | ((data: any) => void);
+    reject?: undefined | ((err: any) => void);
 }
 
 interface GetConfigExtraction {
@@ -448,13 +455,13 @@ interface MTAuth {
     emulate: (projectUrl?: string) => Promise<void>;
 }
 
-interface SigninResult {
+export interface SigninResult {
     user: AuthData;
     token: string;
     refreshToken: string;
 }
 
-interface SignupResult extends SigninResult {
+export interface SignupResult extends SigninResult {
     isNewUser: boolean;
 }
 

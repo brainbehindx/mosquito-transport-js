@@ -72,6 +72,7 @@ export const mfetch = async (input = '', init, config) => {
             !(body instanceof Blob)
         ) throw `"body" must be any of string, buffer, object, File, Blob`;
     }
+    await awaitStore();
 
     const rawBody = (body instanceof File || body instanceof Blob) ? Buffer.from(await body.arrayBuffer()) : body;
 
@@ -80,7 +81,8 @@ export const mfetch = async (input = '', init, config) => {
             rawHeader,
             rawBody,
             !!disableAuth,
-            input
+            input,
+            disableAuth ? '' : (Scoped.AuthJWTToken[projectUrl] || '')
         ]).toString('base64')
     );
     const processReqId = `${reqId}_${disableCache}_${retrieval}`;
@@ -108,7 +110,6 @@ export const mfetch = async (input = '', init, config) => {
             }
         };
 
-        await awaitStore();
         const resolveCache = (reqData) => {
             finalize(reqData, undefined, { fromCache: true });
         };
