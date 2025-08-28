@@ -147,7 +147,7 @@ export const mfetch = async (input = '', init, config) => {
             const [reqBuilder, [privateKey]] = uglified ? await serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
 
             const f = await fetch(isLink ? input : `${projectUrl}/${normalizeRoute(input)}`, {
-                ...hasBody ? { method: 'POST' } : {},
+                ...(encodeBody || uglified) ? { method: 'POST' } : {},
                 credentials: 'omit',
                 ...init,
                 ...uglified ? { body: reqBuilder } : encodeBody ? { body: serialize(body) } : {},
