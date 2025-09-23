@@ -82,7 +82,7 @@ export class MTStorage {
 
             xhr.setRequestHeader('Content-Type', 'buffer/upload');
             if (Scoped.AuthJWTToken[projectUrl])
-                xhr.setRequestHeader('Mosquito-Token', Scoped.AuthJWTToken[projectUrl]);
+                xhr.setRequestHeader('MToken', Scoped.AuthJWTToken[projectUrl]);
             if (createHash) xhr.setRequestHeader('hash-upload', 'yes');
             xhr.setRequestHeader('Mosquito-Destination', destination);
             xhr.withCredentials = false;

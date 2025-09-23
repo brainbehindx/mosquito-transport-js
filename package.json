@@ -1,6 +1,6 @@
 {
   "name": "mosquito-transport-js",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Javascript web sdk for mosquito-transport (https://github.com/brainbehindx/mosquito-transport)",
   "main": "src/index.js",
   "type": "module",
