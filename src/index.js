@@ -79,7 +79,7 @@ export class MosquitoTransport {
                 isConnected = true;
                 Scoped.IS_CONNECTED[projectUrl] = true;
                 if (recentToken) updateMountedToken();
-                ServerReachableListener.dispatch(projectUrl, true);
+                ServerReachableListener.dispatchPersist(projectUrl, true);
                 awaitStore().then(() => {
                     if (isConnected) trySendPendingWrite(projectUrl);
                 });
@@ -88,7 +88,7 @@ export class MosquitoTransport {
                 ++connectionIte;
                 isConnected = false;
                 Scoped.IS_CONNECTED[projectUrl] = false;
-                ServerReachableListener.dispatch(projectUrl, false);
+                ServerReachableListener.dispatchPersist(projectUrl, false);
             }
 
             const manualCheckConnection = () => {

@@ -17,7 +17,7 @@ broadcaster.onmessage = async (e) => {
         const { projectUrl, authData } = data;
         CacheStore.AuthStore[projectUrl] = authData;
         Scoped.AuthJWTToken[projectUrl] = authData?.token;
-        TokenRefreshListener.dispatch(projectUrl);
+        TokenRefreshListener.dispatchPersist(projectUrl);
         triggerAuthToken(projectUrl);
         initTokenRefresher(Scoped.InitializedProject[projectUrl]);
     } else if (kind === 'database-sync') {
