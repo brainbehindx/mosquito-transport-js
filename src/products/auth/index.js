@@ -288,8 +288,7 @@ export const purgePendingToken = async (nodeId) => {
             isConnected = (await (await fetch(_areYouOk(projectUrl), { credentials: 'omit' })).json()).status === 'yes';
         } catch (_) { }
 
-        if (!isConnected)
-            await awaitReachableServer(projectUrl);
+        if (!isConnected) await awaitReachableServer(projectUrl);
 
         const [reqBuilder] = await buildFetchInterface({
             body: { token, r_token },

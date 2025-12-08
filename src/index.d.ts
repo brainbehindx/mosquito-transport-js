@@ -1,6 +1,6 @@
 import { BSON } from "./vendor/bson";
 
-interface RNMTConfig {
+export interface RNMTConfig {
     dbName?: string;
     dbUrl?: string;
     projectUrl: string;
@@ -38,7 +38,7 @@ interface RNMTConfig {
     castBSON?: boolean;
 }
 
-interface GetDatabase {
+export interface GetDatabase {
     collection: (path: string) => RNMTCollection;
 }
 
@@ -98,7 +98,7 @@ type auth_provider_id_values = auth_provider_id['GOOGLE'] |
 interface ReleaseCacheOption_IO {
 }
 
-interface ReleaseCacheOption {
+export interface ReleaseCacheOption {
     /**
      * fs is used as the default caching mechanism
      * 
@@ -137,7 +137,7 @@ interface ReleaseCacheOption {
     promoteCache?: boolean;
 }
 
-interface RNMTSocket {
+export interface RNMTSocket {
     timeout: (timeout?: number) => ({
         emitWithAck: (...args: any) => Promise<any>;
     });
@@ -167,7 +167,7 @@ interface CountConfig {
     disableAuth?: boolean;
 }
 
-interface FetchHttpResponse extends Response {
+export interface FetchHttpResponse extends Response {
     /**
      * true if this response was from local cache
      */
@@ -188,7 +188,7 @@ export default class RNMT {
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
 
-interface RNMTCollection {
+export interface RNMTCollection {
     find: (find?: DocumentFind) => ({
         get: (config?: GetConfig) => Promise<DocumentResult[]>;
         listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
@@ -258,7 +258,7 @@ interface RNMTCollection {
     deleteMany: (find?: DocumentFind, config?: WriteConfig) => Promise<DocumentWriteResult>;
 }
 
-interface CollectionTaskIO<T> {
+export interface CollectionTaskIO<T> {
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): T;
 }
 
@@ -270,7 +270,7 @@ interface OnConnectChain extends StartStop {
     onDisconnect: () => CollectionTaskIO<StartStop>;
 }
 
-interface CollectionIO extends CollectionTaskIO<OnConnectChain> {
+export interface CollectionIO extends CollectionTaskIO<OnConnectChain> {
     onDisconnect: () => CollectionTaskIO<StartStop>;
 }
 
@@ -282,7 +282,7 @@ interface DocumentError extends ErrorResponse {
 
 }
 
-interface FetchHttpConfig {
+export interface FetchHttpConfig {
     retrieval?: GetConfig['retrieval'];
     /**
      * disable sending authentication token along with this request
@@ -429,7 +429,7 @@ interface DocumentWriteValue {
 
 }
 
-interface RNMTAuth {
+export interface RNMTAuth {
     customSignin: (email: string, password: string) => Promise<SigninResult>;
     customSignup: (email: string, password: string, name?: string, metadata?: Object) => Promise<SignupResult>;
     /**
@@ -465,7 +465,7 @@ export interface SignupResult extends SigninResult {
     isNewUser: boolean;
 }
 
-interface AuthData {
+export interface AuthData {
     email?: string;
     metadata: Object;
     signupMethod: auth_provider_id_values;
@@ -473,7 +473,8 @@ interface AuthData {
     joinedOn: number;
     uid: string;
     claims: Object;
-    emailVerified: boolean;
+    authVerified: boolean;
+    passwordVerified?: boolean | undefined;
     tokenID: string;
     disabled: boolean;
     entityOf: string;
@@ -487,7 +488,7 @@ interface AuthData {
     sub: string;
 }
 
-interface RefreshTokenData {
+export interface RefreshTokenData {
     uid: string;
     tokenID: string;
     isRefreshToken: true;
@@ -497,11 +498,11 @@ interface RefreshTokenData {
     sub: string;
 }
 
-interface TokenEventData extends AuthData {
+export interface TokenEventData extends AuthData {
     tokenManager: TokenManager;
 }
 
-interface TokenManager {
+export interface TokenManager {
     refreshToken: string;
     accessToken: string;
 }
@@ -524,14 +525,14 @@ interface DownloadOptions {
     awaitServer?: boolean;
 }
 
-interface RNMTStorage {
+export interface RNMTStorage {
     downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void, options?: DownloadOptions) => () => void;
     uploadFile: (file: string, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: UploadOptions) => () => void;
     deleteFile: (path: string) => Promise<void>;
     deleteFolder: (folder: string) => Promise<void>;
 }
 
-interface DownloadProgressStats {
+export interface DownloadProgressStats {
     receivedBtyes: number;
     expectedBytes: number;
     isPaused: boolean;
