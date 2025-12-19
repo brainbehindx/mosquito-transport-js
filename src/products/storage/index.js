@@ -5,6 +5,7 @@ import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 
 import { awaitReachableServer, buildFetchInterface, buildFetchResult } from "../../helpers/utils";
 import { awaitRefreshToken } from "../auth/accessor";
 import { simplifyError } from "simplify-error";
+import { Validator } from "guard-object";
 
 const LINKING_ERROR =
     `The package 'react-native-mosquito-transport' doesn't seem to be linked. Make sure: \n\n` +
@@ -19,6 +20,7 @@ const RNMTModule = NativeModules.Mosquitodb || (
         },
     })
 );
+
 const emitter = Platform.OS === 'android' ?
     DeviceEventEmitter : new NativeEventEmitter(RNMTModule);
 
@@ -27,26 +29,43 @@ export class MTStorage {
         this.builder = { ...config };
     }
 
-    downloadFile(link = '', onComplete, destination, onProgress, options) {
-        const { awaitServer } = options || {};
+    downloadFile = (link = '', destination, options) => {
+        const { awaitServer, onProgress } = options || {};
         let hasFinished, isPaused, hasCancelled;
 
         const { projectUrl, extraHeaders } = this.builder;
+        let onComplete;
+
+        const promise = new Promise((resolve, reject) => {
+            onComplete = (err, path) => {
+                if (hasFinished) return;
+                hasFinished = true;
+                if (path) {
+                    resolve(path);
+                } else reject(err);
+            }
+        });
+
+        promise.abort = () => {
+            if (hasFinished || hasCancelled) return;
+            RNMTModule.cancelDownload(processID);
+            hasCancelled = true;
+            onComplete?.({ error: 'download_aborted', message: 'The download process was aborted' });
+        }
 
         if (destination && (typeof destination !== 'string' || !destination.trim())) {
             onComplete?.({ error: 'destination_invalid', message: 'destination must be a non-empty string' });
-            return () => { };
+            return promise;
         }
         if (destination) destination = prefixStoragePath(destination?.trim());
 
-        if (typeof link !== 'string' || !link.trim().startsWith(`${EngineApi.staticStorage(projectUrl)}/`)) {
+        if (typeof link !== 'string' || !Validator.LINK(link = link.trim())) {
             onComplete?.({
                 error: 'invalid_link',
-                message: `link has an invalid value, expected a string that starts with "${EngineApi.staticStorage(projectUrl)}/"`
+                message: `downloadFile first argument has an invalid value, expected a valid link string but got '${link}' instead`
             });
-            return () => { };
+            return promise;
         }
-        link = link.trim();
 
         const processID = `${++Scoped.StorageProcessID}`;
         const init = async () => {
@@ -86,7 +105,6 @@ export class MTStorage {
                     onComplete?.(path ? undefined : (result?.simpleError || { error, message: errorDes }), path);
                 resultListener.remove();
                 progressListener.remove();
-                hasFinished = true;
             });
 
             RNMTModule.downloadFile({
@@ -103,30 +121,36 @@ export class MTStorage {
         }
 
         init();
-
-        return () => {
-            if (hasFinished || hasCancelled) return;
-            RNMTModule.cancelDownload(processID);
-            hasCancelled = true;
-            setTimeout(() => {
-                onComplete?.({ error: 'download_aborted', message: 'The download process was aborted' });
-            }, 1);
-        }
+        return promise;
     }
 
-    uploadFile(file = '', destination = '', onComplete, onProgress, options) {
-        const { createHash, awaitServer } = options || {};
+    uploadFile = (file = '', destination = '', options) => {
+        const { createHash, awaitServer, onProgress } = options || {};
         let hasFinished, hasCancelled;
+        let thisComplete;
 
-        const thisComplete = (...args) => {
-            if (hasFinished) return;
-            hasFinished = true;
-            onComplete?.(...args);
-        }
+        const promise = new Promise((resolve, reject) => {
+            thisComplete = (err, url) => {
+                if (hasFinished) return;
+                hasFinished = true;
+                if (url) {
+                    resolve(url);
+                } else reject(err);
+            }
+        });
+
+        promise.abort = () => {
+            if (hasFinished || hasCancelled) return;
+            hasCancelled = true;
+            setTimeout(() => {
+                thisComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
+            }, 0);
+            RNMTModule.cancelUpload(processID);
+        };
 
         if (typeof file !== 'string' || !file.trim()) {
             thisComplete?.({ error: 'file_path_invalid', message: 'file must be a non-empty string in uploadFile()' });
-            return () => { };
+            return promise;
         }
         destination = destination?.trim?.();
 
@@ -134,7 +158,7 @@ export class MTStorage {
             validateDestination(destination);
         } catch (error) {
             thisComplete?.({ error: 'destination_invalid', message: error });
-            return () => { };
+            return promise;
         }
 
         const isAsset = file.startsWith('ph://') || file.startsWith('content://');
@@ -142,6 +166,7 @@ export class MTStorage {
 
         const { projectUrl, uglify, extraHeaders } = this.builder;
         const processID = `${++Scoped.StorageProcessID}`;
+        const thisProjectUrl = options?.projectUrl || projectUrl;
 
         const init = async () => {
             if (awaitServer) await awaitReachableServer(projectUrl);
@@ -167,7 +192,7 @@ export class MTStorage {
             const authToken = Scoped.AuthJWTToken[projectUrl];
 
             RNMTModule.uploadFile({
-                url: EngineApi._uploadFile(projectUrl, uglify),
+                url: EngineApi._uploadFile(thisProjectUrl, uglify),
                 file: isAsset ? file : file.substring('file://'.length),
                 ...authToken ? { authToken } : {},
                 createHash: createHash ? 'yes' : 'no',
@@ -178,24 +203,16 @@ export class MTStorage {
         }
 
         init();
-
-        return () => {
-            if (hasFinished || hasCancelled) return;
-            hasCancelled = true;
-            setTimeout(() => {
-                thisComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
-            }, 0);
-            RNMTModule.cancelUpload(processID);
-        }
+        return promise;
     }
 
-    deleteFile = (path) => deleteContent(this.builder, path);
-    deleteFolder = (path) => deleteContent(this.builder, path, true);
+    deleteFile = (path, options) => deleteContent(this.builder, path, options);
+    deleteFolder = (path, options) => deleteContent(this.builder, path, options, true);
 }
 
 const { _deleteFile, _deleteFolder } = EngineApi;
 
-const deleteContent = async (builder, path, isFolder) => {
+const deleteContent = async (builder, path, options, isFolder) => {
     const { projectUrl, uglify, extraHeaders, serverE2E_PublicKey } = builder;
 
     try {
@@ -207,8 +224,10 @@ const deleteContent = async (builder, path, isFolder) => {
             serverE2E_PublicKey,
             uglify
         });
+        const thisProjectUrl = options?.projectUrl || projectUrl;
 
-        const data = await buildFetchResult(await fetch((isFolder ? _deleteFolder : _deleteFile)(projectUrl, uglify), reqBuilder), uglify);
+        const res = await fetch((isFolder ? _deleteFolder : _deleteFile)(thisProjectUrl, uglify), reqBuilder);
+        const data = await buildFetchResult(res, uglify);
         const result = uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data;
 
         if (result.status !== 'success') throw 'operation not successful';

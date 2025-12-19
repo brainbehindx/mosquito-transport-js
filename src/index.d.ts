@@ -174,6 +174,11 @@ export interface FetchHttpResponse extends Response {
     fromCache?: boolean | undefined;
 }
 
+interface CustomSocketOption extends OveridenProjectUrl {
+    disableAuth?: boolean;
+    authHandshake?: Object;
+}
+
 export default class RNMT {
     constructor(config: RNMTConfig);
     static initializeCache(option?: ReleaseCacheOption): void;
@@ -183,7 +188,7 @@ export default class RNMT {
     storage(): RNMTStorage;
     fetchHttp(endpoint: string, init?: RequestInit, config?: FetchHttpConfig): Promise<FetchHttpResponse>;
     listenReachableServer(callback: (reachable: boolean) => void): () => void;
-    getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): RNMTSocket;
+    getSocket(options?: CustomSocketOption): RNMTSocket;
     onConnect: () => CollectionIO;
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
@@ -507,15 +512,28 @@ export interface TokenManager {
     accessToken: string;
 }
 
-interface UploadOptions {
+interface OveridenProjectUrl {
+    /**
+     * The server instance to send requests to. This overrides the parent `projectUrl`, but still relies on the parent `projectUrl` for authentication token resolution and verify server reachability.
+     */
+    projectUrl?: string;
+}
+
+interface UploadOptions extends OveridenProjectUrl {
     /**
      * optionally create hash for this upload to save disk space
      */
     createHash?: boolean;
+
     /**
      * wait for a reachable server before initiating the upload task
      */
     awaitServer?: boolean;
+
+    /**
+     * monitor upload progress stats
+     */
+    onProgress?: (stats: UploadProgressStats) => void;
 }
 
 interface DownloadOptions {
@@ -523,13 +541,25 @@ interface DownloadOptions {
      * wait for a reachable server before initiating the download task
      */
     awaitServer?: boolean;
+
+    /**
+     * monitor download progress stats
+     */
+    onProgress?: (stats: DownloadProgressStats) => void;
+}
+
+interface StorageTask extends Promise<string> {
+    /**
+     * abort the running task process
+     */
+    abort: () => void;
 }
 
 export interface RNMTStorage {
-    downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void, options?: DownloadOptions) => () => void;
-    uploadFile: (file: string, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: UploadOptions) => () => void;
-    deleteFile: (path: string) => Promise<void>;
-    deleteFolder: (folder: string) => Promise<void>;
+    downloadFile: (link: string, filepath?: string | undefined, options?: DownloadOptions | undefined) => StorageTask;
+    uploadFile: (filepath: string, destination: string, options?: UploadOptions | undefined) => StorageTask;
+    deleteFile: (path: string, options?: OveridenProjectUrl | undefined) => Promise<void>;
+    deleteFolder: (folder: string, options?: OveridenProjectUrl | undefined) => Promise<void>;
 }
 
 export interface DownloadProgressStats {

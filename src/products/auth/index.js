@@ -254,11 +254,13 @@ const clearCacheForSignout = (builder, disposeEmulated) => {
 export const doSignOut = async (builder) => {
     if (!Scoped.IsStoreReady) await awaitStore();
     const emulatedURL = CacheStore.EmulatedAuth[builder.projectUrl];
+    const thisAuthStore = emulatedURL ? undefined : basicClone(CacheStore.AuthStore[builder.projectUrl]);
 
     clearCacheForSignout(builder, !emulatedURL);
     updateCacheStore(['AuthStore', 'EmulatedAuth']);
     if (emulatedURL) return;
-    await revokeAuthIntance(builder);
+
+    await revokeAuthIntance(builder, thisAuthStore);
 };
 
 export const revokeAuthIntance = async (builder, authStore) => {

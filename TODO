@@ -30,3 +30,6 @@
 - .json() should be parse nicely
 - when server is offline and suddenly comes online, fetchHttp throw some error
 - string to Buffer may be in utf16
+
+# changes made
+storage uploadFile method and others

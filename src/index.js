@@ -165,7 +165,7 @@ class RNMT {
     listenReachableServer = (callback) => listenReachableServer(callback, this.config.projectUrl);
 
     getSocket = (configOpts) => {
-        const { disableAuth, authHandshake } = configOpts || {};
+        const { disableAuth, authHandshake, projectUrl: overidenUrl } = configOpts || {};
         const { projectUrl, uglify, serverE2E_PublicKey, wsPrefix, extraHeaders } = this.config;
 
         const restrictedRoute = [
@@ -278,7 +278,10 @@ class RNMT {
             const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
             const [reqBuilder, [privateKey]] = uglify ? await serializeE2E({ a_extras: authHandshake }, mtoken, serverE2E_PublicKey) : [null, []];
 
-            socket = io(`${wsPrefix}://${projectUrl.split('://')[1]}`, {
+            const getWsPrefix = url => url.startsWith('https') ? 'wss' : 'ws';
+            const wsUrl = overidenUrl ? `${getWsPrefix(overidenUrl)}://${overidenUrl.split('://')[1]}` : `${wsPrefix}://${projectUrl.split('://')[1]}`;
+
+            socket = io(wsUrl, {
                 transports: ['websocket', 'polling', 'flashsocket'],
                 extraHeaders,
                 auth: uglify ? {
