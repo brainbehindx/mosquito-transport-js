@@ -11,69 +11,81 @@ export class MTStorage {
         this.builder = { ...config };
     }
 
-    uploadFile = (file, destination, onComplete, onProgress, reqOptions) => {
-        const { awaitServer, createHash } = reqOptions || {};
-        let hasCancelled = false,
-            hasFinished = false,
-            xhr;
+    uploadFile = (file, destination, options) => {
+        const { createHash, awaitServer, onProgress } = options || {};
+        let hasFinished = false;
+        let thisComplete;
+
+        const promise = new Promise((resolve, reject) => {
+            thisComplete = (err, url) => {
+                if (hasFinished) return;
+                hasFinished = true;
+                if (url) {
+                    resolve(url);
+                } else reject(err);
+            }
+        });
+
+        promise.abort = () => {
+            if (hasFinished) return;
+            xhr.abort();
+        }
+
+        let fileStream, buffer;
+
+        if (Buffer.isBuffer(file) || file instanceof Uint8Array || file instanceof ArrayBuffer) {
+            buffer = file;
+        } else if ((file instanceof File) || (file instanceof Blob)) {
+            fileStream = file;
+        } else if (typeof file === 'string' && file.trim()) {
+            buffer = Buffer.from(file.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
+        } else {
+            thisComplete?.({
+                error: 'file_path_invalid',
+                message: `uploadFile() first argument must either be a blob, buffer or base64 string`
+            });
+            return promise;
+        }
+        destination = destination?.trim?.();
+
+        try {
+            validateDestination(destination);
+        } catch (error) {
+            thisComplete?.({ error: 'destination_invalid', message: error });
+            return promise;
+        }
+
+        const { projectUrl, uglify, extraHeaders } = this.builder;
+        const xhr = new XMLHttpRequest();
 
         (async () => {
-            let fileStream, buffer;
-
-            if (Buffer.isBuffer(file)) {
-                buffer = file;
-            } else if ((file instanceof File) || (file instanceof Blob)) {
-                fileStream = file;
-            } else if (typeof file === 'string' && file.trim()) {
-                buffer = Buffer.from(file.replace(/^data:\w+\/\w+;base64,/, ''), 'base64');
-            } else {
-                onComplete?.({
-                    error: 'file_path_invalid',
-                    message: `uploadFile() first argument must either be a blob, buffer or base64 string`
-                });
-                return;
-            }
-            if (hasCancelled) return;
-            destination = destination?.trim?.();
-
-            try {
-                validateDestination(destination);
-            } catch (error) {
-                onComplete?.({ error: 'destination_invalid', message: error });
-                return () => { };
-            }
-
-            const { projectUrl, uglify, extraHeaders } = this.builder;
-            xhr = new XMLHttpRequest();
+            const thisProjectUrl = options?.projectUrl || projectUrl;
 
             if (awaitServer) await awaitReachableServer(projectUrl);
             await awaitRefreshToken(projectUrl);
 
-            xhr.open('POST', EngineApi._uploadFile(projectUrl, uglify), true);
+            xhr.open('POST', EngineApi._uploadFile(thisProjectUrl, uglify), true);
             xhr.upload.addEventListener('progress', e => {
                 onProgress?.({ sentBytes: e.loaded, totalBytes: e.total });
             });
             xhr.addEventListener('load', () => {
-                if (hasFinished || hasCancelled) return;
-                hasFinished = true;
+                if (hasFinished) return;
                 try {
                     const result = JSON.parse(xhr.responseText);
                     if (result.status === 'success' && result.downloadUrl) {
-                        onComplete?.(undefined, result.downloadUrl);
+                        thisComplete?.(undefined, result.downloadUrl);
                     } else throw (result.simpleError || { error: 'unexpected_error', message: `An unexpected error occurred` });
                 } catch (e) {
-                    onComplete?.(e);
+                    thisComplete?.(e);
                 }
             });
             xhr.addEventListener('error', () => {
-                if (hasFinished || hasCancelled) return;
-                hasFinished = true;
-                onComplete?.({ error: 'unexpected_error', message: 'An unexpected error occurred' });
+                if (hasFinished) return;
+                thisComplete?.({ error: 'unexpected_error', message: 'An unexpected error occurred' });
             });
             xhr.addEventListener('abort', () => {
-                if (hasFinished || hasCancelled) return;
-                hasFinished = true;
-                onComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
+                if (hasFinished) return;
+                thisComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
             });
 
             Object.entries(extraHeaders || {}).forEach(([k, v]) => {
@@ -89,23 +101,16 @@ export class MTStorage {
             xhr.send(fileStream || buffer);
         })();
 
-        return () => {
-            if (hasCancelled) return;
-            hasCancelled = true;
-            if (xhr) xhr.abort();
-            setTimeout(() => {
-                onComplete?.({ error: 'upload_aborted', message: 'The upload process was aborted' });
-            }, 1);
-        }
+        return promise;
     }
 
-    deleteFile = (path) => deleteContent(this.builder, path);
-    deleteFolder = (path) => deleteContent(this.builder, path, true);
+    deleteFile = (path, options) => deleteContent(this.builder, path, options);
+    deleteFolder = (path, options) => deleteContent(this.builder, path, options, true);
 }
 
 const { _deleteFile, _deleteFolder } = EngineApi;
 
-const deleteContent = async (builder, path, isFolder) => {
+const deleteContent = async (builder, path, options, isFolder) => {
     const { projectUrl, uglify, extraHeaders, serverE2E_PublicKey } = builder;
 
     try {
@@ -117,8 +122,10 @@ const deleteContent = async (builder, path, isFolder) => {
             serverE2E_PublicKey,
             uglify
         });
+        const thisProjectUrl = options?.projectUrl || projectUrl;
 
-        const data = await buildFetchResult(await fetch((isFolder ? _deleteFolder : _deleteFile)(projectUrl, uglify), reqBuilder), uglify);
+        const res = await fetch((isFolder ? _deleteFolder : _deleteFile)(thisProjectUrl, uglify), reqBuilder);
+        const data = await buildFetchResult(res, uglify);
         const result = uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data;
 
         if (result.status !== 'success') throw 'operation not successful';

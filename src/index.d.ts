@@ -1,6 +1,6 @@
 import { BSON } from "bson";
 
-interface MTConfig {
+export interface MTConfig {
     dbName?: string;
     dbUrl?: string;
     projectUrl: string;
@@ -38,7 +38,7 @@ interface MTConfig {
     castBSON?: boolean;
 }
 
-interface GetDatabase {
+export interface GetDatabase {
     collection: (path: string) => MTCollection;
 }
 
@@ -77,7 +77,7 @@ export class DoNotEncrypt {
     value: any;
 }
 
-export { BSON }
+export { BSON };
 
 interface auth_provider_id {
     GOOGLE: 'google';
@@ -96,7 +96,7 @@ type auth_provider_id_values = auth_provider_id['GOOGLE'] |
     auth_provider_id['APPLE'];
 
 
-interface ReleaseCacheOption {
+export interface ReleaseCacheOption {
     /**
      * select the mechanism for storing data locally
      * - local-storage: uses [localStorage](https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage) web api for storing data.
@@ -142,7 +142,7 @@ interface ReleaseCacheOption {
     promoteCache?: boolean;
 }
 
-interface MTSocket {
+export interface MTSocket {
     timeout: (timeout?: number) => ({
         emitWithAck: (...args: any) => Promise<any>;
     });
@@ -172,11 +172,16 @@ interface CountConfig {
     disableAuth?: boolean;
 }
 
-interface FetchHttpResponse extends Response {
+export interface FetchHttpResponse extends Response {
     /**
      * true if this response was from local cache
      */
     fromCache?: boolean | undefined;
+}
+
+interface CustomSocketOption extends OveridenProjectUrl {
+    disableAuth?: boolean;
+    authHandshake?: Object;
 }
 
 export class MosquitoTransport {
@@ -188,12 +193,12 @@ export class MosquitoTransport {
     storage(): MTStorage;
     fetchHttp(endpoint: string, init?: RequestInit, config?: FetchHttpConfig): Promise<FetchHttpResponse>;
     listenReachableServer(callback: (reachable: boolean) => void): () => void;
-    getSocket(options: { disableAuth?: boolean; authHandshake?: Object }): MTSocket;
+    getSocket(options?: CustomSocketOption): MTSocket;
     onConnect: () => CollectionIO;
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
 
-interface MTCollection {
+export interface MTCollection {
     find: (find?: DocumentFind) => ({
         get: (config?: GetConfig) => Promise<DocumentResult[]>;
         listen: (callback: (snapshot?: DocumentResult[]) => void, onError?: (error?: DocumentError) => void, config?: GetConfig) => void;
@@ -263,7 +268,7 @@ interface MTCollection {
     deleteMany: (find?: DocumentFind, config?: WriteConfig) => Promise<DocumentWriteResult>;
 }
 
-interface CollectionTaskIO<T> {
+export interface CollectionTaskIO<T> {
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): T;
 }
 
@@ -275,7 +280,7 @@ interface OnConnectChain extends StartStop {
     onDisconnect: () => CollectionTaskIO<StartStop>;
 }
 
-interface CollectionIO extends CollectionTaskIO<OnConnectChain> {
+export interface CollectionIO extends CollectionTaskIO<OnConnectChain> {
     onDisconnect: () => CollectionTaskIO<StartStop>;
 }
 
@@ -287,7 +292,7 @@ interface DocumentError extends ErrorResponse {
 
 }
 
-interface FetchHttpConfig {
+export interface FetchHttpConfig {
     retrieval?: GetConfig['retrieval'];
     /**
      * disable sending authentication token along with this request
@@ -434,7 +439,7 @@ interface DocumentWriteValue {
 
 }
 
-interface MTAuth {
+export interface MTAuth {
     customSignin: (email: string, password: string) => Promise<SigninResult>;
     customSignup: (email: string, password: string, name?: string, metadata?: Object) => Promise<SignupResult>;
     /**
@@ -470,7 +475,7 @@ export interface SignupResult extends SigninResult {
     isNewUser: boolean;
 }
 
-interface AuthData {
+export interface AuthData {
     email?: string;
     metadata: Object;
     signupMethod: auth_provider_id_values;
@@ -478,7 +483,8 @@ interface AuthData {
     joinedOn: number;
     uid: string;
     claims: Object;
-    emailVerified: boolean;
+    authVerified: boolean;
+    passwordVerified?: boolean | undefined;
     tokenID: string;
     disabled: boolean;
     entityOf: string;
@@ -492,7 +498,7 @@ interface AuthData {
     sub: string;
 }
 
-interface RefreshTokenData {
+export interface RefreshTokenData {
     uid: string;
     tokenID: string;
     isRefreshToken: true;
@@ -502,26 +508,39 @@ interface RefreshTokenData {
     sub: string;
 }
 
-interface TokenEventData extends AuthData {
+export interface TokenEventData extends AuthData {
     tokenManager: TokenManager;
 }
 
-interface TokenManager {
+export interface TokenManager {
     refreshToken: string;
     accessToken: string;
 }
 
 declare type Base64String = string;
 
-interface UploadOptions {
+interface OveridenProjectUrl {
+    /**
+     * The server instance to send requests to. This overrides the parent `projectUrl`, but still relies on the parent `projectUrl` for authentication token resolution and verify server reachability.
+     */
+    projectUrl?: string;
+}
+
+interface UploadOptions extends OveridenProjectUrl {
     /**
      * optionally create hash for this upload to save disk space
      */
     createHash?: boolean;
+
     /**
      * wait for a reachable server before initiating the upload task
      */
     awaitServer?: boolean;
+
+    /**
+     * monitor upload progress stats
+     */
+    onProgress?: (stats: UploadProgressStats) => void;
 }
 
 interface DownloadOptions {
@@ -529,16 +548,28 @@ interface DownloadOptions {
      * wait for a reachable server before initiating the download task
      */
     awaitServer?: boolean;
+
+    /**
+     * monitor download progress stats
+     */
+    onProgress?: (stats: DownloadProgressStats) => void;
 }
 
-interface MTStorage {
-    downloadFile: (link: string, onComplete?: (error?: ErrorResponse, filepath?: string) => void, destination?: string, onProgress?: (stats: DownloadProgressStats) => void, options?: DownloadOptions) => () => void;
-    uploadFile: (file: Base64String | Blob | File | Uint8Array, destination: string, onComplete?: (error?: ErrorResponse, downloadUrl?: string) => void, onProgress?: (stats: UploadProgressStats) => void, options?: UploadOptions) => () => void;
-    deleteFile: (path: string) => Promise<void>;
-    deleteFolder: (folder: string) => Promise<void>;
+export interface MTStorage {
+    downloadFile: (link: string, filepath?: string | undefined, options?: DownloadOptions | undefined) => StorageTask;
+    uploadFile: (file: Base64String | Blob | File | Uint8Array, destination: string, options?: UploadOptions | undefined) => StorageTask;
+    deleteFile: (path: string, options?: OveridenProjectUrl | undefined) => Promise<void>;
+    deleteFolder: (folder: string, options?: OveridenProjectUrl | undefined) => Promise<void>;
 }
 
-interface DownloadProgressStats {
+interface StorageTask extends Promise<string> {
+    /**
+     * abort the running task process
+     */
+    abort: () => void;
+}
+
+export interface DownloadProgressStats {
     receivedBtyes: number;
     expectedBytes: number;
     isPaused: boolean;

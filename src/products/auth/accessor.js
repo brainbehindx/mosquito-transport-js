@@ -1,4 +1,4 @@
-import { doSignOut, revokeAuthIntance } from ".";
+import { doSignOut, revokeAuthIntance } from "./index.js";
 import EngineApi from "../../helpers/engine_api";
 import { AuthTokenListener, TokenRefreshListener } from "../../helpers/listeners";
 import { decodeBinary, deserializeE2E, listenReachableServer } from "../../helpers/peripherals";

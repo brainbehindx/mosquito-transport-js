@@ -3,7 +3,7 @@ import { deserializeE2E, listenReachableServer, niceHash, normalizeRoute, serial
 import { awaitStore, getReachableServer } from "../../helpers/utils";
 import { RETRIEVAL } from "../../helpers/values";
 import { Scoped } from "../../helpers/variables";
-import { awaitRefreshToken } from "../auth/accessor";
+import { awaitRefreshToken, parseToken } from "../auth/accessor";
 import { simplifyCaughtError } from "simplify-error";
 import { guardObject, Validator } from "guard-object";
 import { serialize } from "entity-serializer";
@@ -73,6 +73,7 @@ export const mfetch = async (input = '', init, config) => {
         ) throw `"body" must be any of string, buffer, object, File, Blob`;
     }
     await awaitStore();
+    const thisToken = disableAuth ? '' : (Scoped.AuthJWTToken[projectUrl] || '');
 
     const rawBody = (body instanceof File || body instanceof Blob) ? Buffer.from(await body.arrayBuffer()) : body;
 
@@ -80,12 +81,12 @@ export const mfetch = async (input = '', init, config) => {
         serialize([
             rawHeader,
             rawBody,
-            !!disableAuth,
+            // !!disableAuth,
             input,
-            disableAuth ? '' : (Scoped.AuthJWTToken[projectUrl] || '')
+            thisToken && await parseToken(thisToken).uid
         ]).toString('base64')
     );
-    const processReqId = `${reqId}_${disableCache}_${retrieval}`;
+    const processReqId = `${reqId}_${thisToken}_${disableCache}_${retrieval}`;
 
     let retries = 0, hasFinalize;
 
@@ -147,7 +148,7 @@ export const mfetch = async (input = '', init, config) => {
             const [reqBuilder, [privateKey]] = uglified ? await serializeE2E(rawBody, mtoken, serverE2E_PublicKey) : [null, []];
 
             const f = await fetch(isLink ? input : `${projectUrl}/${normalizeRoute(input)}`, {
-                ...(encodeBody || uglified) ? { method: 'POST' } : {},
+                ...(hasBody || uglified) ? { method: 'POST' } : {},
                 credentials: 'omit',
                 ...init,
                 ...uglified ? { body: reqBuilder } : encodeBody ? { body: serialize(body) } : {},
