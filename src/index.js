@@ -59,11 +59,10 @@ export class MosquitoTransport {
 
         if (!Scoped.InitializedProject[projectUrl]) {
             Scoped.InitializedProject[projectUrl] = basicClone(this.config);
-            Scoped.LastTokenRefreshRef[projectUrl] = 0;
             triggerAuthToken(projectUrl);
-            initTokenRefresher({ ...this.config }, true);
+            initTokenRefresher({ config: this.config, forceRefresh: true });
 
-            let isConnected, recentToken;
+            let isConnected, recentToken, isVirtualMachineFocused = true;
 
             const socket = io(`${this.config.wsPrefix}://${this.config.baseUrl}`, {
                 transports: ['websocket', 'polling', 'flashsocket'],
@@ -87,8 +86,9 @@ export class MosquitoTransport {
             const onDisconnect = () => {
                 ++connectionIte;
                 isConnected = false;
-                Scoped.IS_CONNECTED[projectUrl] = false;
-                ServerReachableListener.dispatchPersist(projectUrl, false);
+                // isConnected = isVirtualMachineFocused ? false : null;
+                Scoped.IS_CONNECTED[projectUrl] = isConnected;
+                ServerReachableListener.dispatchPersist(projectUrl, isConnected);
             }
 
             const manualCheckConnection = () => {
@@ -111,6 +111,27 @@ export class MosquitoTransport {
             socket.on('disconnect', () => {
                 manualCheckConnection();
             });
+
+            const onVisibility = (visible) => {
+                isVirtualMachineFocused = visible;
+                manualCheckConnection();
+            }
+
+            const onBlur = () => {
+                onVisibility(false);
+            }
+
+            const onFocus = () => {
+                onVisibility(true);
+            }
+
+            window.addEventListener('blur', onBlur);
+            window.addEventListener('focus', onFocus);
+            document.addEventListener('visibilitychange', () => {
+                onVisibility(document.visibilityState === 'visible');
+            });
+            window.addEventListener('online', manualCheckConnection);
+            window.addEventListener('offline', manualCheckConnection);
 
             const updateMountedToken = () => {
                 socket.emit('_update_mounted_user', recentToken || null);
@@ -325,7 +346,7 @@ export class MosquitoTransport {
             tokenListener = listenTokenReady(status => {
                 if (lastTokenStatus === (status || false)) return;
 
-                if (status === 'ready') {
+                if (status) {
                     init();
                 } else {
                     socket?.close?.();
@@ -468,7 +489,7 @@ const ConfigValidator = {
         if (v.endsWith('/')) throw '"projectUrl" must not end with a trailing slash "/"';
     },
     disableCache: (v) => {
-        if (typeof v !== 'boolean')
+        if (typeof v !== 'boolean' && v !== undefined)
             throw `Invalid value supplied to disableCache, value must be a boolean`;
     },
     maxRetries: (v) => {
@@ -476,7 +497,7 @@ const ConfigValidator = {
             throw `Invalid value supplied to maxRetries, value must be positive integer greater than zero`;
     },
     enableE2E_Encryption: (v) => {
-        if (typeof v !== 'boolean')
+        if (typeof v !== 'boolean' && v !== undefined)
             throw `Invalid value supplied to enableE2E_Encryption, value must be a boolean`;
     },
     castBSON: v => {
@@ -488,7 +509,7 @@ const ConfigValidator = {
             throw `Expected "borrowToken" to be valid https or http link but got "${v}"`;
     },
     serverE2E_PublicKey: (v) => {
-        if (typeof v !== 'string' || !v.trim())
+        if (v !== undefined && (typeof v !== 'string' || !v.trim()))
             throw `Invalid value supplied to serverETE_PublicKey, value must be a non-empty string`;
     },
     extraHeaders: v => {

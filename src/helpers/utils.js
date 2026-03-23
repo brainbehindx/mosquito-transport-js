@@ -157,13 +157,11 @@ export const releaseCacheStore = async (builder) => {
         Scoped.AuthJWTToken[key] = value?.token;
     });
     Scoped.IsStoreReady = true;
-    StoreReadyListener.dispatchPersist('_', 'ready');
+    StoreReadyListener.dispatchPersist('_', true);
     setTimeout(() => {
         if (tobePurged.length) updateCacheStore(tobePurged);
     }, 0);
 };
-
-export const getPrefferTime = () => Date.now() + (Scoped.serverTimeOffset || 0);
 
 export const awaitStore = () => new Promise(resolve => {
     if (Scoped.IsStoreReady) {
@@ -171,7 +169,7 @@ export const awaitStore = () => new Promise(resolve => {
         return;
     }
     const l = StoreReadyListener.listenToPersist('_', t => {
-        if (t === 'ready') {
+        if (t) {
             resolve();
             l();
         }
