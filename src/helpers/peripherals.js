@@ -1,19 +1,11 @@
 import { Buffer } from "buffer";
-import { ServerReachableListener } from "./listeners";
 import naclPkg from 'tweetnacl-functional';
 import e2e_worker from "./e2e_worker";
 import { deserialize, serialize } from "entity-serializer";
 import { grab } from "poke-object";
+import { Scoped } from "./variables";
 
 const { box, randomBytes } = naclPkg;
-
-export const listenReachableServer = (callback, projectUrl) => {
-    let lastValue;
-    return ServerReachableListener.listenToPersist(projectUrl, t => {
-        if (typeof t === 'boolean' && t !== lastValue) callback?.(t);
-        lastValue = t;
-    });
-};
 
 export const prefixStoragePath = (path, prefix = 'file:///') => {
     let cleanedPath = path.replace(/^[^/]+:\/{1,3}/, '');
@@ -28,13 +20,6 @@ export const prefixStoragePath = (path, prefix = 'file:///') => {
 
     return `${prefix}${cleanedPath}`;
 };
-
-export const niceTry = (promise) => new Promise(async resolve => {
-    try {
-        const r = await promise();
-        resolve(r);
-    } catch (e) { resolve(); }
-});
 
 export const normalizeRoute = (route = '') => route.split('').map((v, i, a) =>
     ((!i && v === '/') || (i === a.length - 1 && v === '/') || (i && a[i - 1] === '/' && v === '/')) ? '' : v
@@ -174,4 +159,10 @@ export const listenScreenVisible = (callback) => {
         window.removeEventListener('focus', onFocus);
         document.removeEventListener('visibilitychange', onChanged);
     }
-}
+};
+
+export const isScreenFocused = () => Scoped.IS_SCREEN_FOCUSED ?? (document.visibilityState === 'visible');
+
+listenScreenVisible(visible => {
+    Scoped.IS_SCREEN_FOCUSED = visible;
+});

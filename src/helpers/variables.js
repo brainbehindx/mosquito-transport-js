@@ -4,6 +4,8 @@ export const Scoped = {
     PendingIte: 0,
     AnyProcessIte: 0,
     IS_CONNECTED: {},
+    AreYouOkPromise: {},
+    IS_SCREEN_FOCUSED: undefined,
     InitializedProject: {},
     ReleaseCacheData: undefined,
     IsStoreReady: false,

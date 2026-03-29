@@ -1,5 +1,5 @@
-import { deserializeE2E, listenReachableServer, listenScreenVisible, serializeE2E } from "./helpers/peripherals";
-import { awaitReachableServer, awaitStore, releaseCacheStore } from "./helpers/utils";
+import { deserializeE2E, isScreenFocused, listenScreenVisible, serializeE2E } from "./helpers/peripherals";
+import { awaitReachableServer, awaitStore, checkAreYouOk, listenReachableServer, releaseCacheStore } from "./helpers/utils";
 import { CacheStore, Scoped } from "./helpers/variables";
 import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
@@ -22,8 +22,7 @@ const {
     _listenDocument,
     _startDisconnectWriteTask,
     _cancelDisconnectWriteTask,
-    _listenUserVerification,
-    _areYouOk
+    _listenUserVerification
 } = EngineApi;
 
 // https://socket.io/docs/v3/emit-cheatsheet/#reserved-events
@@ -62,7 +61,7 @@ export class MosquitoTransport {
             triggerAuthToken(projectUrl);
             initTokenRefresher({ config: this.config, forceRefresh: true });
 
-            let isConnected, recentToken, isVirtualMachineFocused = true;
+            let isConnected, recentToken;
 
             const socket = io(`${this.config.wsPrefix}://${this.config.baseUrl}`, {
                 transports: ['websocket', 'polling', 'flashsocket'],
@@ -90,28 +89,19 @@ export class MosquitoTransport {
                 });
             };
 
-            const onDisconnect = () => {
-                ++connectionIte;
-                setConnected(isVirtualMachineFocused ? false : null);
-            }
-
             const manualCheckConnection = () => {
                 if (chainedPromise) return;
                 const ref = ++connectionIte;
-                const signal = new AbortController();
-                const timer = setTimeout(() => {
-                    signal.abort();
-                }, 7000);
-                chainedPromise = fetch(_areYouOk(projectUrl), { credentials: 'omit', signal }).then(async r => {
-                    clearTimeout(timer);
+
+                checkAreYouOk(projectUrl).then(ok => {
                     chainedPromise = undefined;
-                    if ((await r.json()).status === 'yes') {
-                        if (ref === connectionIte) onConnect();
-                    } else throw null;
-                }).catch(() => {
-                    clearTimeout(timer);
-                    chainedPromise = undefined;
-                    if (ref === connectionIte) onDisconnect();
+                    if (ref !== connectionIte) return;
+                    if (ok) {
+                        onConnect();
+                    } else {
+                        ++connectionIte;
+                        isConnected = false;
+                    }
                 });
             }
 
@@ -126,9 +116,7 @@ export class MosquitoTransport {
                 manualCheckConnection();
             });
 
-            listenScreenVisible(visible => {
-                if (visible === isVirtualMachineFocused) return;
-                isVirtualMachineFocused = visible;
+            listenScreenVisible(() => {
                 manualCheckConnection();
             });
             window.addEventListener('online', manualCheckConnection);
@@ -371,10 +359,10 @@ export class MosquitoTransport {
                 makeSocketCallback();
                 const reloadIntance = async () => {
                     if (!disableAuth) await awaitRefreshToken(projectUrl);
-                    if (initIte === instance_id) remountInit();
+                    if (initIte === instance_id && !hasCancelled) remountInit();
                 }
 
-                if (document.visibilityState === 'visible') {
+                if (isScreenFocused()) {
                     setTimeout(() => {
                         awaitReachableServer(projectUrl).then(reloadIntance);
                     }, timeout);
@@ -406,8 +394,7 @@ export class MosquitoTransport {
                 if (initIte !== instance_id || wasHandled) return;
                 wasHandled = true;
                 clearSocket();
-                if (r === 'io client disconnect') return;
-                if (r === 'io server disconnect') {
+                if (r === 'io client disconnect' || r === 'io server disconnect') {
                     resultant.destroy();
                 } else reconnect(0);
             });
@@ -497,6 +484,7 @@ export class MosquitoTransport {
                 }
             },
             destroy: () => {
+                if (hasCancelled) return;
                 hasCancelled = true;
                 tokenListener?.();
                 clearForegroundListener();
