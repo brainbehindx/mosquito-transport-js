@@ -140,3 +140,38 @@ export const deserializeE2E = async (data, serverPublicKey, clientPrivateKey) =>
 
 export const encodeBinary = (s) => Buffer.from(s, 'utf8').toString('base64');
 export const decodeBinary = (s) => Buffer.from(s, 'base64').toString('utf8');
+
+export const listenScreenVisible = (callback) => {
+    let lastVisibility;
+
+    const onVisibility = (visible) => {
+        if (visible === lastVisibility) return;
+        lastVisibility = visible;
+        callback(visible);
+    }
+
+    const onBlur = () => {
+        onVisibility(false);
+    }
+
+    const onFocus = () => {
+        onVisibility(true);
+    }
+
+    const onChanged = () => {
+        onVisibility(document.visibilityState === 'visible');
+    }
+
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onChanged);
+
+    const timer = setTimeout(onChanged, 9);
+
+    return () => {
+        clearTimeout(timer);
+        window.removeEventListener('blur', onBlur);
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onChanged);
+    }
+}
