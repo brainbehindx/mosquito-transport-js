@@ -360,9 +360,7 @@ export class MosquitoTransport {
                 }
 
                 if (isScreenFocused()) {
-                    setTimeout(() => {
-                        awaitReachableServer(projectUrl).then(reloadIntance);
-                    }, timeout);
+                    awaitReachableServer(projectUrl, timeout).then(reloadIntance);
                 } else {
                     foregroundListener = listenScreenVisible(visible => {
                         if (visible) {
@@ -393,7 +391,7 @@ export class MosquitoTransport {
                 clearSocket();
                 if (r === 'io client disconnect' || r === 'io server disconnect') {
                     resultant.destroy();
-                } else reconnect(0);
+                } else reconnect(true);
             });
 
             clientPrivateKey = privateKey;

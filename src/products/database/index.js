@@ -261,9 +261,7 @@ const listenDocument = (callback, onError, builder, config) => {
             }
 
             if (isScreenFocused()) {
-                setTimeout(() => {
-                    awaitReachableServer(projectUrl).then(reloadIntance);
-                }, timeout);
+                awaitReachableServer(projectUrl, timeout).then(reloadIntance);
             } else {
                 foregroundListener = listenScreenVisible(visible => {
                     if (visible) {
@@ -288,7 +286,7 @@ const listenDocument = (callback, onError, builder, config) => {
             clearSocket();
             if (r === 'io client disconnect' || r === 'io server disconnect') {
                 canceller();
-            } else reconnect(0);
+            } else reconnect(true);
         });
     };
 
@@ -419,9 +417,7 @@ const initOnDisconnectionTask = ({ builder, connectData, disconnectData }) => {
             }
 
             if (isScreenFocused()) {
-                setTimeout(() => {
-                    awaitReachableServer(projectUrl).then(reloadIntance);
-                }, timeout);
+                awaitReachableServer(projectUrl, timeout).then(reloadIntance);
             } else {
                 foregroundListener = listenScreenVisible(visible => {
                     if (visible) {
@@ -446,7 +442,7 @@ const initOnDisconnectionTask = ({ builder, connectData, disconnectData }) => {
             clearSocket();
             if (r === 'io client disconnect' || r === 'io server disconnect') {
                 canceller();
-            } else reconnect(0);
+            } else reconnect(true);
         });
     };
 
@@ -557,7 +553,7 @@ const countCollection = async (builder, config) => {
             } else if (retries > maxRetries) {
                 finalize(undefined, { error: 'retry_limit_exceeded', message: `retry exceed limit(${maxRetries})` });
             } else {
-                awaitReachableServer(projectUrl).then(() => {
+                awaitReachableServer(projectUrl, true).then(() => {
                     readValue().then(
                         e => { finalize(e); },
                         e => { finalize(undefined, e); }
@@ -731,7 +727,7 @@ const findObject = async (builder, initConfig) => {
             } else if (retries > maxRetries) {
                 finalize(undefined, { error: 'retry_limit_exceeded', message: `retry exceed limit(${maxRetries})` });
             } else {
-                awaitReachableServer(projectUrl).then(() => {
+                awaitReachableServer(projectUrl, true).then(() => {
                     if (intruder) {
                         intruder.resolve = undefined;
                         intruder.reject = undefined;
@@ -877,7 +873,7 @@ const commitData = async (builder, value, type, config) => {
                 );
             } else {
                 if (delivery === DELIVERY.NO_CACHE_AWAIT) {
-                    awaitReachableServer(projectUrl).then(() => {
+                    awaitReachableServer(projectUrl, true).then(() => {
                         sendValue().then(
                             e => { finalize(e.a, undefined, e.c); },
                             e => { finalize(undefined, e.b, e.c); }
