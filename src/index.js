@@ -1,4 +1,4 @@
-import { deserializeE2E, isScreenFocused, listenScreenVisible, serializeE2E } from "./helpers/peripherals";
+import { deserializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible, serializeE2E } from "./helpers/peripherals";
 import { awaitReachableServer, awaitStore, checkAreYouOk, listenReachableServer, releaseCacheStore } from "./helpers/utils";
 import { CacheStore, Scoped } from "./helpers/variables";
 import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
@@ -88,10 +88,10 @@ export class MosquitoTransport {
                 });
             };
 
-            const manualCheckConnection = () => {
+            const manualCheckConnection = (refresh) => {
                 const ref = ++connectionIte;
 
-                checkAreYouOk(projectUrl).then(ok => {
+                checkAreYouOk(projectUrl, refresh).then(ok => {
                     if (ref !== connectionIte) return;
                     if (ok) {
                         onConnect();
@@ -110,11 +110,11 @@ export class MosquitoTransport {
 
             socket.on('connect', onConnect);
             socket.on('disconnect', () => {
-                manualCheckConnection();
+                manualCheckConnection(true);
             });
 
-            listenScreenVisible(() => {
-                manualCheckConnection();
+            listenScreenVisible(visible => {
+                if (visible) manualCheckConnection();
             });
             window.addEventListener('online', manualCheckConnection);
             window.addEventListener('offline', manualCheckConnection);
@@ -148,6 +148,7 @@ export class MosquitoTransport {
 
     static initializeCache(prop) {
         if (Scoped.ReleaseCacheData) throw `calling ${this.name}() multiple times is prohibited`;
+        if (!isBrowserContext()) throw 'initializeCache(...args) should only be called in a web browser context';
         validateReleaseCacheProp({ ...prop });
         const { io, cacheProtocol } = prop;
         Scoped.ReleaseCacheData = { ...prop, isMemory: !!io || ['local-storage', undefined].includes(cacheProtocol) };

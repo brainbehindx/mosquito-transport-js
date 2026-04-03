@@ -126,6 +126,8 @@ export const deserializeE2E = async (data, serverPublicKey, clientPrivateKey) =>
 export const encodeBinary = (s) => Buffer.from(s, 'utf8').toString('base64');
 export const decodeBinary = (s) => Buffer.from(s, 'base64').toString('utf8');
 
+export const isBrowserContext = () => typeof window !== 'undefined' && typeof document !== 'undefined';
+
 export const listenScreenVisible = (callback) => {
     let lastVisibility;
 
@@ -163,6 +165,7 @@ export const listenScreenVisible = (callback) => {
 
 export const isScreenFocused = () => Scoped.IS_SCREEN_FOCUSED ?? (document.visibilityState === 'visible');
 
-listenScreenVisible(visible => {
-    Scoped.IS_SCREEN_FOCUSED = visible;
-});
+if (isBrowserContext())
+    listenScreenVisible(visible => {
+        Scoped.IS_SCREEN_FOCUSED = visible;
+    });
