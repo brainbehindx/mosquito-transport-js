@@ -193,10 +193,8 @@ const hasTokenExpire = async (projectUrl) => {
     if (!timestamp) return true;
     const uptime = getTimestamp();
     const diff = Math.abs((timestamp.time - timestamp.uptime) - (Date.now() - uptime));
-    const hasTimeShifted = diff >= 60_000;
 
-    if (hasTimeShifted) console.log('time shifted by ', diff);
-    return hasTimeShifted || (timestamp.ttl <= (uptime - timestamp.uptime));
+    return diff >= 60_000 || (timestamp.ttl <= (uptime - timestamp.uptime));
 }
 
 const updateTokenTimestamp = async (projectUrl, token) => {

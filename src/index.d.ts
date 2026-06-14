@@ -187,6 +187,8 @@ interface CustomSocketOption extends OveridenProjectUrl {
 export class MosquitoTransport {
     constructor(config: MTConfig);
     static initializeCache(option?: ReleaseCacheOption): void;
+    get isOnline(): boolean | undefined;
+    areYouOnline(): Promise<boolean>;
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
     collection(path: string): MTCollection;
     auth(): MTAuth;
