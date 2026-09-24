@@ -1,7 +1,7 @@
 import { ServerReachableListener, StoreReadyListener } from "./listeners";
 import { CACHE_STORAGE_PATH } from "./values";
 import { CacheStore, Scoped } from "./variables";
-import { isScreenFocused, serializeE2E } from "./peripherals";
+import { parseToken, isScreenFocused, serializeE2E } from "./peripherals";
 import { DatastoreParser } from "../products/database/bson";
 import { deserialize } from "entity-serializer";
 import { breakDbMap, purgeRedundantRecords } from "./purger";
@@ -155,13 +155,29 @@ export const releaseCacheStore = async (builder) => {
         CacheStore[k] = v;
     });
     Object.entries(CacheStore.AuthStore).forEach(([key, value]) => {
-        Scoped.AuthJWTToken[key] = value?.token;
+        updateAuthData(key, value?.token);
     });
     Scoped.IsStoreReady = true;
     StoreReadyListener.dispatchPersist('_', true);
     setTimeout(() => {
         if (tobePurged.length) updateCacheStore(tobePurged);
     }, 0);
+};
+
+export const updateAuthData = (projectUrl, token) => {
+    if (token) {
+        Scoped.AuthJWTToken[projectUrl] = token;
+        try {
+            Scoped.AuthData[projectUrl] = parseToken(token);
+        } catch (_) {
+            Scoped.AuthData[projectUrl] = undefined;
+        }
+    } else {
+        if (Scoped.AuthJWTToken[projectUrl])
+            delete Scoped.AuthJWTToken[projectUrl];
+        if (Scoped.AuthData[projectUrl])
+            delete Scoped.AuthData[projectUrl];
+    }
 };
 
 export const awaitStore = () => new Promise(resolve => {

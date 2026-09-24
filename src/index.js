@@ -1,10 +1,10 @@
-import { deserializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible, serializeE2E } from "./helpers/peripherals";
+import { deserializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible, serializeE2E, parseToken } from "./helpers/peripherals";
 import { awaitReachableServer, awaitStore, checkAreYouOk, listenReachableServer, releaseCacheStore } from "./helpers/utils";
 import { CacheStore, Scoped } from "./helpers/variables";
 import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener } from "./helpers/listeners";
-import { awaitRefreshToken, initTokenRefresher, listenToken, listenTokenReady, triggerAuthToken, parseToken } from "./products/auth/accessor";
+import { awaitRefreshToken, initTokenRefresher, listenToken, listenTokenReady, triggerAuthToken } from "./products/auth/accessor";
 import { TIMESTAMP, DOCUMENT_EXTRACTION, FIND_GEO_JSON, GEO_JSON, TIMESTAMP_OFFSET } from "./products/database/types";
 import { mfetch } from "./products/http_callable";
 import { io } from "socket.io-client";
@@ -163,6 +163,10 @@ export class MosquitoTransport {
 
     get isOnline() {
         return Scoped.IS_CONNECTED[this.config.projectUrl];
+    }
+
+    get user() {
+        return Scoped.AuthData[this.config.projectUrl];
     }
 
     areYouOnline() {
@@ -631,6 +635,7 @@ export {
     DOCUMENT_EXTRACTION,
     FIND_GEO_JSON,
     GEO_JSON,
+    parseToken,
     AUTH_PROVIDER_ID,
     BSON
 };

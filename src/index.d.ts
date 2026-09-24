@@ -188,6 +188,7 @@ export class MosquitoTransport {
     constructor(config: MTConfig);
     static initializeCache(option?: ReleaseCacheOption): void;
     get isOnline(): boolean | undefined;
+    get user(): AuthData | undefined;
     areYouOnline(): Promise<boolean>;
     getDatabase(dbName?: string, dbUrl?: string): GetDatabase;
     collection(path: string): MTCollection;
@@ -199,6 +200,8 @@ export class MosquitoTransport {
     onConnect: () => CollectionIO;
     batchWrite(map: BatchWriteValue[], config?: BatchWriteConfig): Promise<DocumentWriteResult[] | undefined>;
 }
+
+export function parseToken(token: string): AuthData | RefreshTokenData | undefined;
 
 export interface MTCollection {
     find: (find?: DocumentFind) => ({
@@ -467,7 +470,6 @@ export interface MTAuth {
     getAuthToken: () => Promise<string | null>;
     getRefreshToken: () => Promise<string | undefined>;
     getRefreshTokenData: () => Promise<RefreshTokenData | undefined>;
-    parseToken: (token: string) => AuthData | RefreshTokenData;
     listenAuth: (callback: (auth: TokenEventData | null) => void) => () => void;
     getAuth: () => Promise<TokenEventData>;
     signOut: () => Promise<void>;
