@@ -1,6 +1,5 @@
 import { Buffer } from "buffer";
 import { Validator } from "guard-object";
-import { BSONError, BSONOffsetError, BSONRegExp, BSONRuntimeError, BSONSymbol, BSONValue, BSONVersionError, Binary, Code, DBRef, Decimal128, Double, Int32, Long, MaxKey, MinKey, ObjectId, Timestamp, UUID } from '../vendor/bson';
 
 const ErrorInstances = [
     niceReturn(() => ReferenceError),
@@ -78,29 +77,6 @@ export function basicClone(obj) {
             return new e(Buffer.from(obj));
     }
 
-    if (isDirectInstance(obj, BSONOffsetError)) {
-        const n = new BSONOffsetError(obj.message, obj.offset);
-        // n.name = obj.name;
-        n.stack = obj.stack;
-        return n;
-    }
-
-    for (
-        const instance of
-        [
-            BSONRuntimeError,
-            BSONVersionError,
-            BSONError
-        ]
-    ) {
-        if (isDirectInstance(obj, instance)) {
-            const n = new instance(obj.message);
-            n.stack = obj.stack;
-            // n.name = obj.name;
-            return n;
-        }
-    }
-
     if (
         typeof Response !== 'undefined' &&
         isDirectInstance(obj, Response)
@@ -115,49 +91,6 @@ export function basicClone(obj) {
         typeof Blob !== 'undefined' &&
         isDirectInstance(obj, Blob)
     ) return obj.slice(0, obj.size, obj.type);
-
-    if (isDirectInstance(obj, BSONRegExp))
-        return new BSONRegExp(obj.pattern, obj.options);
-
-    if (isDirectInstance(obj, BSONSymbol))
-        return new BSONSymbol(obj.value);
-
-    if (isDirectInstance(obj, Binary))
-        return new Binary(obj.buffer, obj.sub_type);
-
-    if (isDirectInstance(obj, Code))
-        return new Code(obj.code, obj.scope);
-
-    if (isDirectInstance(obj, DBRef))
-        return new DBRef(obj.collection, obj.oid, obj.db, obj.fields);
-
-    if (isDirectInstance(obj, Decimal128))
-        return new Decimal128(obj.bytes);
-
-    if (isDirectInstance(obj, Double))
-        return new Double(obj.value);
-
-    if (isDirectInstance(obj, Int32))
-        return new Int32(obj.value);
-
-    if (isDirectInstance(obj, Long))
-        return new Long(obj.low, obj.high, obj.unsigned);
-
-    if (isDirectInstance(obj, Timestamp))
-        return new Timestamp({ t: obj.t, i: obj.i });
-
-    if (isDirectInstance(obj, MaxKey))
-        return new MaxKey();
-
-    if (isDirectInstance(obj, MinKey))
-        return new MinKey();
-
-    if (isDirectInstance(obj, ObjectId))
-        return new ObjectId(obj.id);
-
-    if (isDirectInstance(obj, UUID)) return new UUID(obj);
-
-    if (isDirectInstance(obj, BSONValue)) return obj;
 
     if (Validator.ARRAY(obj))
         return [...obj.map(basicClone)];

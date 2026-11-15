@@ -39,7 +39,6 @@ const mclient = new RNMosquitoTransport({
   - [enableE2E_Encryption](#enableE2E_Encryption)
   - [serverE2E_PublicKey](#serverE2E_PublicKey)
   - [extraHeaders](#extraHeaders)
-  - [castBSON](#castBSON)
 - [RNMosquitoTransport Methods](#RNMosquitoTransportMethods)
  - [initialCache](#initialCache)
  - [getDatabase](#getDatabase)

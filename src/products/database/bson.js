@@ -1,58 +1,36 @@
-import { deserialize, serialize } from "../../vendor/bson";
 import { Buffer } from "buffer";
-import { basicClone } from "../../helpers/basic_clone";
 
-export const deserializeBSON = (data, cast) => {
-    if (typeof data === 'string')
-        data = Buffer.from(data, 'base64');
+function randomBytes(size) {
+    const bytes = new Uint8Array(size);
 
-    return deserialize(data, {
-        bsonRegExp: !cast,
-        promoteLongs: !!cast,
-        promoteValues: !!cast,
-        promoteBuffers: !!cast
-    });
-};
-
-export const serializeToBase64 = doc => Buffer.from(serialize(doc)).toString('base64');
-
-export const DatastoreParser = {
-    encode: (obj) => {
-        obj = basicClone(obj);
-        const { command, config } = obj;
-
-        const serializeQuery = (e) =>
-            ['find', 'findOne'].forEach(n => {
-                if (e?.[n]) e[n] = serializeToBase64({ _: e[n] });
-            });
-
-        if (command) serializeQuery(command);
-        if (config) {
-            if (config.extraction)
-                (Array.isArray(config.extraction) ? config.extraction : [config.extraction]).forEach(e => {
-                    serializeQuery(e);
-                });
+    try {
+        return crypto.getRandomValues(bytes);
+    } catch (error) {
+        for (let i = 0; i < size; i++) {
+            bytes[i] = Math.floor(Math.random() * 256);
         }
-        if (obj.data) obj.data = serializeToBase64({ _: obj.data });
-        return obj;
-    },
-    decode: (obj, cast = true) => {
-        obj = basicClone(obj);
-        const { command, config } = obj;
 
-        const serializeQuery = (e) =>
-            ['find', 'findOne'].forEach(n => {
-                if (e?.[n]) e[n] = deserializeBSON(e[n], cast)._;
-            });
-
-        if (command) serializeQuery(command);
-        if (config) {
-            if (config.extraction)
-                (Array.isArray(config.extraction) ? config.extraction : [config.extraction]).forEach(e => {
-                    serializeQuery(e);
-                });
-        }
-        if (obj.data) obj.data = deserializeBSON(obj.data, cast)._;
-        return obj;
+        return bytes;
     }
+}
+
+const PROCESS_UNIQUE = randomBytes(5);
+let counter = randomBytes(3).readUIntBE(0, 3);
+
+export function currentObjectId() {
+    const timestamp = Buffer.allocUnsafe(4);
+    timestamp.writeUInt32BE(Math.floor(Date.now() / 1000));
+
+    counter = (counter + 1) & 0xffffff;
+
+    const increment = Buffer.allocUnsafe(3);
+    increment.writeUIntBE(counter, 0, 3);
+
+    return {
+        $oid: Buffer.concat([
+            timestamp,
+            PROCESS_UNIQUE,
+            increment
+        ]).toString('hex')
+    };
 };

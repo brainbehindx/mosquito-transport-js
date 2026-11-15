@@ -1,7 +1,6 @@
 
 export const Scoped = {
     serverTimeOffset: undefined,
-    PendingIte: 0,
     AnyProcessIte: 0,
     IS_CONNECTED: {},
     AreYouOkPromise: {},
@@ -13,7 +12,6 @@ export const Scoped = {
     TokenRefreshTimer: {},
     TokenRefreshProcess: {},
     TokenTimestamping: {},
-    StorageProcessID: 0,
     InitiatedForcedToken: {},
     PendingFetchCollective: {},
     PendingDbReadCollective: {},
@@ -57,4 +55,8 @@ export const CacheStore = {
     EmulatedAuth: {},
     PendingWrites: {},
     FetchedStore: {}
+};
+
+export const PACKAGES = {
+    tweetnacl: undefined
 };

@@ -11,6 +11,7 @@ export interface Spec extends TurboModule {
   cancelDownload(process_id: string): void;
   pauseDownload(process_id: string): void;
   resumeDownload(process_id: string): void;
+  sha256: (input: string) => Promise<string>;
 
   // utils
   getSystemUptime(): Promise<number>;

@@ -1,16 +1,16 @@
 import { niceHash, shuffleArray, sortArrayByObjectKey } from "../../helpers/peripherals";
 import { awaitStore, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
-import { assignExtractionFind, CompareBson, confirmFilterDoc, defaultBSON, downcastBSON, validateCollectionName, validateFilter } from "./validator";
+import { assignExtractionFind, CompareBson, confirmFilterDoc, validateCollectionName, validateFilter } from "./validator";
 import { DatabaseRecordsListener } from "../../helpers/listeners";
-import { BSONRegExp, ObjectId, Timestamp } from "../../vendor/bson";
 import { niceGuard, Validator } from "guard-object";
 import { TIMESTAMP } from "./types";
 import { docSize, incrementDatabaseSize } from "./counter";
-import { DatastoreParser, serializeToBase64 } from "./bson";
+import { currentObjectId } from "./bson";
 import { FS_PATH, getSystem, useFS } from "../../helpers/fs_manager";
 import { grab, poke, unpoke } from "poke-object";
 import { basicClone } from "../../helpers/basic_clone";
+import { serialize } from "entity-serializer";
 
 const { LIMITER_DATA, LIMITER_RESULT, DB_COUNT_QUERY } = FS_PATH;
 
@@ -100,16 +100,16 @@ export const insertRecord = async (builder, config, accessIdWithoutLimit, value,
             const editionSizeOffset = thisSize - (instanceData?.size || 0);
             const resultSizeOffset = isEpisode ? thisSize - (resultData?.size || 0) : 0;
 
-            const newData = DatastoreParser.encode({
+            const newData = {
                 command,
                 config,
                 latest_limiter: limit,
                 data: value ? Array.isArray(value) ? value : [value] : []
-            });
-            const newResultData = isEpisode && DatastoreParser.encode({
+            };
+            const newResultData = isEpisode && {
                 data: value,
                 size: thisSize
-            });
+            };
 
             await Promise.all([
                 fs.set(LIMITER_DATA(path), accessIdWithoutLimit, {
@@ -191,10 +191,11 @@ export const getRecord = async (builder, accessIdWithoutLimit, episode = 0) => {
             const resultAccessId = `${accessIdWithoutLimit}-${limit}`;
 
             const qData = await (
-                isEpisode ? fs.find(LIMITER_RESULT(path), resultAccessId, ['value']) :
-                    fs.find(LIMITER_DATA(path), accessIdWithoutLimit, ['value'])
+                isEpisode
+                    ? fs.find(LIMITER_RESULT(path), resultAccessId, ['value'])
+                    : fs.find(LIMITER_DATA(path), accessIdWithoutLimit, ['value'])
             ).catch(() => null);
-            const thisData = qData && DatastoreParser.decode(qData.value);
+            const thisData = qData?.value;
 
             if (!thisData) return null;
 
@@ -248,24 +249,27 @@ export const generateRecordID = (builder, config, removeLimit) => {
     const { command, path, countDoc } = builder;
     const { extraction, excludeFields, returnOnly } = config || {};
 
-    const recordObj = Object.fromEntries(
-        Object.entries({
-            path,
-            command,
-            countDoc,
-            extraction,
-            excludeFields,
-            returnOnly
-        }).filter(([_, v]) => v !== undefined)
-    );
+    const recordObj =
+        Object.fromEntries(
+            Object.entries({
+                path,
+                command,
+                countDoc,
+                extraction,
+                excludeFields,
+                returnOnly
+            }).filter(([_, v]) => v !== undefined)
+        );
 
     if (command) recordObj.command = arrangeCommands(command, removeLimit);
     if (extraction) {
-        if (Array.isArray(extraction)) recordObj.extraction = extraction.map(v => arrangeCommands(v));
-        else recordObj.extraction = arrangeCommands(extraction);
+        recordObj.extraction =
+            Array.isArray(extraction)
+                ? extraction.map(v => arrangeCommands(v))
+                : arrangeCommands(extraction);
     }
 
-    return niceHash(serializeToBase64(recordObj));
+    return niceHash(recordObj);
 };
 
 const arrangeCommands = (c, removeLimit) => {
@@ -286,9 +290,10 @@ const arrangeCommands = (c, removeLimit) => {
     return sortObject(c);
 };
 
-const sortObject = (o) => Object.fromEntries(
-    Object.entries(o).sort(([a], [b]) => (a > b) ? 1 : (a < b) ? -1 : 0)
-);
+const sortObject = (o) =>
+    Object.fromEntries(
+        Object.entries(o).sort(([a], [b]) => (a > b) ? 1 : (a < b) ? -1 : 0)
+    );
 
 const recursiveFlat = (a) => {
     return a.map(v => Array.isArray(v) ? recursiveFlat(v) : v).flat();
@@ -401,8 +406,6 @@ export const addPendingWrites = async (builder, writeId, result) => {
     ['path', 'dbUrl', 'dbName', 'find', 'extraHeaders', 'maxRetries'].forEach(v => {
         if (builder[v] !== undefined) pureBuilder[v] = builder[v];
     });
-    pureBuilder.find = serializeToBase64({ _: pureBuilder.find });
-    pendingSnapshot.value = serializeToBase64({ _: pendingSnapshot.value });
 
     let wasShifted;
 
@@ -481,19 +484,21 @@ const syncCache = async (builder, result) => {
 
             await Promise.all(colListing.map(async ([access_id]) =>
                 useFS(builder, access_id, 'database')(async fs => {
-                    const data = await fs.find(LIMITER_DATA(path), access_id, ['value'])
-                        .then(r => DatastoreParser.decode(r.value));
+                    const data =
+                        await fs.find(LIMITER_DATA(path), access_id, ['value'])
+                            .then(r => r.value);
 
                     await MutateDataInstance([access_id, data], path =>
                         pathFinder[path] || (
-                            pathFinder[path] = fs.list(LIMITER_DATA(path), ['value'])
-                                .then(v => v.map(d => DatastoreParser.decode(d[1].value).data).flat())
+                            pathFinder[path] =
+                            fs.list(LIMITER_DATA(path), ['value'])
+                                .then(v => v.map(d => d[1].value?.data).flat())
                                 .catch(() => [])
                         )
                     );
                     await fs.set(LIMITER_DATA(path), access_id, {
                         touched: Date.now(),
-                        value: DatastoreParser.encode(data),
+                        value: data,
                         size: data.size
                     });
                 })
@@ -530,11 +535,12 @@ const syncCache = async (builder, result) => {
                     return d[0];
                 }
                 const extractionResultant = buildAssignedExtraction(obj);
-                const extractionBinary = serializeToBase64({ _: extractionResultant });
+                const extractionBinary = serialize(extractionResultant).toString('base64');
 
-                const sameProjection = instance_data.find(({ _foreign_doc, ...restDoc }) =>
-                    extractionBinary === serializeToBase64({ _: buildAssignedExtraction(restDoc) })
-                );
+                const sameProjection =
+                    instance_data.find(({ _foreign_doc, ...restDoc }) =>
+                        extractionBinary === serialize(buildAssignedExtraction(restDoc)).toString('base64')
+                    );
 
                 if (sameProjection) return sameProjection._foreign_doc;
 
@@ -626,7 +632,7 @@ const syncCache = async (builder, result) => {
                     const obj = deserializeNonAtomicWrite({
                         ...extras,
                         ...writeObj,
-                        ...'_id' in extras ? {} : { _id: new ObjectId() }
+                        ...'_id' in extras ? {} : { _id: currentObjectId() }
                     });
                     if (extraction) obj._foreign_doc = await accessExtraction(obj);
 
@@ -683,7 +689,7 @@ const syncCache = async (builder, result) => {
                 const obj = {
                     ...extras,
                     ...deserializeAtomicWrite(
-                        { _id: '_id' in extras ? extras._id : new ObjectId() },
+                        { _id: '_id' in extras ? extras._id : currentObjectId() },
                         deserializeWriteValue(writeObj),
                         true,
                         type
@@ -730,13 +736,14 @@ const revertChanges = async (builder, pendingData) => {
             RevertMutation(grab(CacheStore.DatabaseStore, [projectUrl, dbUrl, dbName, path, 'instance', access_id]));
         } else {
             await useFS(builder, access_id, 'database')(async fs => {
-                const colObj = await fs.find(LIMITER_DATA(path), access_id, ['value'])
-                    .then(v => DatastoreParser.decode(v.value))
-                    .catch(() => null);
+                const colObj =
+                    await fs.find(LIMITER_DATA(path), access_id, ['value'])
+                        .then(v => v.value)
+                        .catch(() => null);
                 if (!colObj) return;
                 RevertMutation(colObj);
                 await fs.set(LIMITER_DATA(path), access_id, {
-                    value: DatastoreParser.encode(colObj),
+                    value: colObj,
                     touched: Date.now(),
                     size: colObj.size
                 });
@@ -757,7 +764,7 @@ const revertChanges = async (builder, pendingData) => {
                     const editedIndex = colList.findIndex(e => CompareBson.equal(e._id, afDoc._id));
                     if (editedIndex !== -1) {
                         if (
-                            serializeToBase64(afDoc) === serializeToBase64(colList[editedIndex])
+                            serialize(afDoc).toString('base64') === serialize(colList[editedIndex]).toString('base64')
                         ) {
                             if (b4Doc) {
                                 colList[editedIndex] = b4Doc;
@@ -812,7 +819,7 @@ const createWriteFromFind = (find) => {
                     result[k] = v.$eq;
                 }
             } else {
-                result[k] = v instanceof RegExp ? new BSONRegExp(v.source, v.flags) : v;
+                result[k] = v;
             }
         }
     });
@@ -911,7 +918,7 @@ const AtomicWriter = {
             !isDate &&
             !isTimestamp
         ) throw `invalid value at $currentDate.${field}, expected any of boolean (true), { $type: "timestamp" } or { $type: "date" } but got ${value}`;
-        poke(object, field, isDate ? new Date() : new Timestamp({ t: Math.floor(Date.now() / 1000), i: 0 }));
+        poke(object, field, isDate ? new Date() : { $timestamp: { t: Math.floor(Date.now() / 1000), i: 0 } });
     },
     $inc: (field, value, object) => {
         const current = grab(object, field);
@@ -919,12 +926,12 @@ const AtomicWriter = {
             console.warn(`cannot use $inc operator on a null value at ${field}`);
             return;
         }
-        const castedCurrent = downcastBSON(current);
-        const castedValue = downcastBSON(value);
+        const castedCurrent = current;
+        const castedValue = value;
 
         if (!Validator.NUMBER(castedValue)) throw `expected a number at $inc.${field} but got ${value}`;
 
-        poke(object, field, Validator.NUMBER(castedCurrent) ? defaultBSON(castedCurrent + castedValue, current) : value);
+        poke(object, field, Validator.NUMBER(castedCurrent) ? castedCurrent + castedValue : value);
     },
     $min: (field, value, object) => {
         const current = grab(object, field);
@@ -940,13 +947,13 @@ const AtomicWriter = {
     },
     $mul: (field, value, object) => {
         const current = grab(object, field);
-        const castedValue = downcastBSON(value);
-        const castedCurrent = downcastBSON(current);
+        const castedValue = value;
+        const castedCurrent = current;
 
         if (!Validator.NUMBER(castedValue))
             throw `expected a number at $mul.${field} but got ${value}`;
 
-        poke(object, field, Validator.NUMBER(castedCurrent) ? defaultBSON(castedCurrent * castedValue, value) : 0);
+        poke(object, field, Validator.NUMBER(castedCurrent) ? castedCurrent * castedValue : 0);
     },
     $rename: (field, value, object) => {
         if (!Validator.EMPTY_STRING(value))

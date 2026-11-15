@@ -194,8 +194,10 @@ export const mfetch = async (input = '', init, config) => {
         } catch (e) {
             let thisRecord;
 
-            const getThisRecord = async () => thisRecord ? thisRecord[0]
-                : (thisRecord = [await getFetchResources(projectUrl, reqId)])[0];
+            const getThisRecord = async () =>
+                thisRecord
+                    ? thisRecord[0]
+                    : (thisRecord = [await getFetchResources(projectUrl, reqId)])[0];
 
             if (e?.simpleError) {
                 finalize(undefined, e.simpleError);

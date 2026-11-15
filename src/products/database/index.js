@@ -1,17 +1,16 @@
 import { io } from "socket.io-client";
 import EngineApi from "../../helpers/engine_api";
 import { DatabaseRecordsListener } from "../../helpers/listeners";
-import { deserializeE2E, serializeE2E } from "../../helpers/peripherals";
+import { deserializeE2E, fnv64Hash, serializeE2E } from "../../helpers/peripherals";
 import { awaitReachableServer, awaitStore, buildFetchInterface, buildFetchResult, getReachableServer, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
 import { addPendingWrites, generateRecordID, getCountQuery, getRecord, insertCountQuery, insertRecord, listenQueryEntry, removePendingWrite, validateWriteValue } from "./accessor";
 import { validateCollectionName, validateFilter, validateFindConfig, validateFindObject, validateListenFindConfig } from "./validator";
 import { awaitRefreshToken, ensureActiveToken, listenTokenReady } from "../auth/accessor";
 import { DELIVERY, RETRIEVAL } from "../../helpers/values";
-import { ObjectId } from "../../vendor/bson";
 import { guardObject, Validator } from "guard-object";
 import { simplifyCaughtError } from "simplify-error";
-import { deserializeBSON, serializeToBase64 } from "./bson";
+import { currentObjectId } from "./bson";
 import { basicClone } from "../../helpers/basic_clone";
 import { AppState } from "react-native";
 
@@ -71,19 +70,21 @@ export class MTCollection {
 
     setMany = (value, config) => commitData(this.builder, value, 'setMany', config);
 
-    addOne = (value, config) => commitData(
-        this.builder,
-        Validator.OBJECT(value) ? { ...value, _id: new ObjectId() } : value,
-        'setOne',
-        config
-    );
+    addOne = (value, config) =>
+        commitData(
+            this.builder,
+            Validator.OBJECT(value) ? { ...value, _id: currentObjectId() } : value,
+            'setOne',
+            config
+        );
 
-    addMany = (value, config) => commitData(
-        this.builder,
-        value.map(v => Validator.OBJECT(v) ? ({ ...v, _id: new ObjectId() }) : v),
-        'setMany',
-        config
-    );
+    addMany = (value, config) =>
+        commitData(
+            this.builder,
+            value.map(v => Validator.OBJECT(v) ? ({ ...v, _id: currentObjectId() }) : v),
+            'setMany',
+            config
+        );
 
     updateOne = (find = {}, value, config) => commitData({ ...this.builder, find }, value, 'updateOne', config);
 
@@ -139,7 +140,7 @@ const {
 const listenDocument = (callback, onError, builder, config) => {
     builder = basicClone(builder);
     config = basicClone(config);
-    const { projectUrl, wsPrefix, serverE2E_PublicKey, baseUrl, dbUrl, dbName, path, disableCache, command, uglify, extraHeaders, castBSON } = builder;
+    const { projectUrl, wsPrefix, serverE2E_PublicKey, baseUrl, dbUrl, dbName, path, disableCache, command, uglify, extraHeaders } = builder;
     const { find, findOne, sort, direction, limit } = command;
     const { disableAuth, episode } = config || {};
     const shouldCache = !disableCache;
@@ -161,20 +162,23 @@ const listenDocument = (callback, onError, builder, config) => {
         lastSnapshot;
 
     const dispatchSnapshot = s => {
-        const thisSnapshotId = serializeToBase64({ _: s });
+        const thisSnapshotId = fnv64Hash(s);
         if (thisSnapshotId === lastSnapshot) return;
         lastSnapshot = thisSnapshotId;
-        callback?.(basicClone(transformBSON(s, castBSON)));
+        callback?.(basicClone(s));
     };
 
     if (shouldCache) {
-        accessId = generateRecordID(builder, config, true).then(hash => {
-            if (hasCancelled) return hash;
-            cacheListener = listenQueryEntry(snapshot => {
-                if (!Scoped.IS_CONNECTED[projectUrl]) dispatchSnapshot(snapshot);
-            }, { accessId: hash, builder, config, processId });
-            return hash;
-        });
+        accessId =
+            generateRecordID(builder, config, true)
+                .then(hash => {
+                    if (hasCancelled) return hash;
+                    cacheListener =
+                        listenQueryEntry(snapshot => {
+                            if (!Scoped.IS_CONNECTED[projectUrl]) dispatchSnapshot(snapshot);
+                        }, { accessId: hash, builder, config, processId });
+                    return hash;
+                });
 
         awaitStore().then(() => {
             if (hasCancelled) return;
@@ -207,12 +211,11 @@ const listenDocument = (callback, onError, builder, config) => {
         if (hasCancelled || processID !== lastInitRef) return;
 
         const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
-        const pureConfig = stripRequestConfig(config);
         const authObj = {
             commands: stripUndefined({
-                config: pureConfig && serializeToBase64(pureConfig),
+                config: stripRequestConfig(config),
                 path,
-                find: serializeToBase64(findOne || find),
+                find: findOne || find,
                 sort,
                 direction,
                 limit
@@ -247,7 +250,7 @@ const listenDocument = (callback, onError, builder, config) => {
                 } else console.error('unhandled listen for:', { path, find }, ' error:', err);
             } else {
                 if (uglify) snapshot = await deserializeE2E(snapshot, serverE2E_PublicKey, privateKey);
-                snapshot = hydrateForeignDoc(deserializeBSON(snapshot)._);
+                snapshot = hydrateForeignDoc(snapshot);
                 dispatchSnapshot(snapshot);
 
                 if (shouldCache) insertRecord(builder, config, await accessId, snapshot, episode);
@@ -379,7 +382,7 @@ const initOnDisconnectionTask = ({ builder, connectData, disconnectData }) => {
         const mtoken = disableAuth ? undefined : Scoped.AuthJWTToken[projectUrl];
         const makeObj = (d) => ({
             ...d?.config,
-            value: serializeToBase64({ _: cleanBatchWrite(d.value) })
+            value: cleanBatchWrite(d.value)
         });
 
         const authObj = {
@@ -526,7 +529,7 @@ const countCollection = async (builder, config) => {
 
             const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
-                    commands: { path, find: serializeToBase64(find) },
+                    commands: { path, find },
                     ...dbName ? { dbName } : undefined,
                     ...dbUrl ? { dbUrl } : undefined
                 },
@@ -569,9 +572,13 @@ const countCollection = async (builder, config) => {
 
 const stripRequestConfig = (config) => {
     const known_fields = ['extraction', 'returnOnly', 'excludeFields'];
-    const requestConfig = Object.entries({ ...config }).map(([k, v]) =>
-        known_fields.includes(k) ? [k, v] : null
-    ).filter(v => v);
+    const requestConfig =
+        Object.entries(config || {})
+            .map(([k, v]) =>
+                known_fields.includes(k)
+                    ? [k, v]
+                    : null
+            ).filter(v => v);
     return requestConfig.length ? Object.fromEntries(requestConfig) : undefined;
 };
 
@@ -581,25 +588,22 @@ const stripUndefined = o => Object.fromEntries(
 
 const hydrateForeignDoc = ({ data, doc_holder }) => {
     const isList = Array.isArray(data);
-    const filled = (isList ? data : [data]).map(v => {
-        if (v?._foreign_doc) {
-            v._foreign_doc = Array.isArray(v._foreign_doc)
-                ? v._foreign_doc.map(k => doc_holder[k])
-                : doc_holder[v._foreign_doc];
-        }
-        return v;
-    });
+    const filled =
+        (isList ? data : [data])
+            .map(v => {
+                if (v?._foreign_doc) {
+                    v._foreign_doc = Array.isArray(v._foreign_doc)
+                        ? v._foreign_doc.map(k => doc_holder[k])
+                        : doc_holder[v._foreign_doc];
+                }
+                return v;
+            });
     return isList ? filled : filled[0];
 }
 
-const transformBSON = (d, castBSON) => {
-    if (castBSON) return d && deserializeBSON(serializeToBase64({ _: d }), true)._;
-    return basicClone(d);
-};
-
 const findObject = async (builder, initConfig) => {
     builder = basicClone(builder);
-    const { projectUrl, serverE2E_PublicKey, dbUrl, dbName, maxRetries = 1, path, disableCache = false, uglify, extraHeaders, command, castBSON } = builder;
+    const { projectUrl, serverE2E_PublicKey, dbUrl, dbName, maxRetries = 1, path, disableCache = false, uglify, extraHeaders, command } = builder;
 
     const pureConfig = stripRequestConfig(initConfig);
     validateFindObject(command);
@@ -627,7 +631,7 @@ const findObject = async (builder, initConfig) => {
             instantProcess = retryProcess === 1;
 
         const finalize = (a, b) => {
-            const res = (instantProcess && a) ? intruder ? transformBSON(a[0] || undefined, castBSON) : a[0] : a;
+            const res = (instantProcess && a) ? intruder ? (a[0] || undefined) : a[0] : a;
             const doClone = v => intruder ? basicClone(v) : v;
 
             if (a) {
@@ -676,9 +680,9 @@ const findObject = async (builder, initConfig) => {
             const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
                     commands: stripUndefined({
-                        config: pureConfig && serializeToBase64(pureConfig),
+                        config: pureConfig,
                         path,
-                        find: serializeToBase64(findOne || find),
+                        find: findOne || find,
                         sort,
                         direction,
                         limit,
@@ -695,9 +699,10 @@ const findObject = async (builder, initConfig) => {
 
             const data = await buildFetchResult(await fetch((findOne ? _readDocument : _queryCollection)(projectUrl, uglify), reqBuilder), uglify);
 
-            const result = hydrateForeignDoc(
-                deserializeBSON((uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data).result)._
-            );
+            const result =
+                hydrateForeignDoc(
+                    (uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data).result
+                );
 
             if (shouldCache) insertRecord(builder, config, accessId, result, episode);
             finalize([result]);
@@ -765,40 +770,42 @@ const findObject = async (builder, initConfig) => {
     return (await readValue());
 };
 
-const transformNullRecursively = obj => Object.fromEntries(
-    Object.entries(obj).map(([k, v]) =>
-        [k, [undefined, Infinity, NaN].includes(v) ? null : Validator.OBJECT(v) ? transformNullRecursively(v) : v]
-    )
-);
+const transformNullRecursively = obj =>
+    Object.fromEntries(
+        Object
+            .entries(obj)
+            .map(([k, v]) =>
+                [k, [undefined, Infinity, NaN].includes(v) ? null : Validator.OBJECT(v) ? transformNullRecursively(v) : v]
+            )
+    );
 
-const cleanBatchWrite = (value) => basicClone(value).map(v => {
-    if (Validator.OBJECT(v?.value)) {
-        v.value = transformNullRecursively(v.value);
-    } else if (Array.isArray(v?.value)) {
-        v.value = v.value.map(e =>
-            Validator.OBJECT(e) ? transformNullRecursively(e) : e
-        );
-    }
-    return v;
-});
+const cleanBatchWrite = (value) =>
+    basicClone(value)
+        .map(v => {
+            if (Validator.OBJECT(v?.value)) {
+                v.value = transformNullRecursively(v.value);
+            } else if (Array.isArray(v?.value)) {
+                v.value =
+                    v.value.map(e =>
+                        Validator.OBJECT(e) ? transformNullRecursively(e) : e
+                    );
+            }
+            return v;
+        });
 
 const commitData = async (builder, value, type, config) => {
     builder = basicClone(builder);
     config = basicClone(config);
     // transform undefined
     if (Validator.OBJECT(value)) {
-        value = value && deserializeBSON(serializeToBase64({ _: transformNullRecursively(value) }))._;
+        value = transformNullRecursively(value);
     } else if (type === 'batchWrite' && Array.isArray(value)) {
-        value = deserializeBSON(
-            serializeToBase64({
-                _: cleanBatchWrite(value)
-            })
-        )._;
+        value = cleanBatchWrite(value);
     }
 
     const { projectUrl, serverE2E_PublicKey, dbUrl, dbName, maxRetries = 1, path, find, disableCache, uglify, extraHeaders } = builder;
     const { disableAuth, delivery = DELIVERY.DEFAULT, stepping } = config || {};
-    const writeId = `${Date.now() + ++Scoped.PendingIte}`;
+    const writeId = `${Date.now() + ++Scoped.AnyProcessIte}`;
     const isBatchWrite = type === 'batchWrite';
     const shouldCache = (delivery !== DELIVERY.DEFAULT || !disableCache) &&
         ![DELIVERY.NO_CACHE_AWAIT, DELIVERY.NO_CACHE_NO_AWAIT].includes(delivery);
@@ -843,11 +850,11 @@ const commitData = async (builder, value, type, config) => {
             const [reqBuilder, [privateKey]] = await buildFetchInterface({
                 body: {
                     commands: stripUndefined({
-                        value: value && serializeToBase64({ _: value }),
+                        value,
                         ...isBatchWrite ? { stepping } : {
                             path,
                             scope: type,
-                            find: find && serializeToBase64(find)
+                            find
                         }
                     }),
                     ...dbName ? { dbName } : undefined,
@@ -911,8 +918,8 @@ export const trySendPendingWrite = async (projectUrl) => {
     for (const [writeId, { snapshot, builder, attempts = 1 }] of sortedWrite) {
         try {
             await commitData(
-                { ...Scoped.InitializedProject[projectUrl], ...builder, find: deserializeBSON(builder.find, true)._ },
-                deserializeBSON(snapshot.value, true)._,
+                { ...Scoped.InitializedProject[projectUrl], ...builder, find: builder.find },
+                snapshot.value,
                 snapshot.type,
                 { ...snapshot.config, delivery: DELIVERY.NO_CACHE_NO_AWAIT }
             );

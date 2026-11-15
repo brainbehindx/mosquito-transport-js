@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { Dirs, FileSystem } from "react-native-file-access";
 import { Buffer } from "buffer";
 
-const PARENT_FOLDER = `${Platform.OS === 'android' ? Dirs.DocumentDir.split('/').slice(0, -1).join('/') : Dirs.LibraryDir}/mosquito_base`;
+const PARENT_FOLDER = `${Platform.OS === 'android' ? Dirs.DocumentDir.split('/').slice(0, -1).join('/') : Dirs.LibraryDir}/zerobase`;
 
 /**
  * this method linearize read/write for individual access_id on the file system ensuring consistency across concurrent operations
@@ -97,8 +97,8 @@ function joinPath(...args) {
 }
 
 export const FS_PATH = {
-    FILE_NAME: 'MOSQUITO_TRANSPORT',
-    TABLE_NAME: 'MT_MAIN',
+    FILE_NAME: 'ZERO_BASE',
+    TABLE_NAME: 'ZB_MAIN',
     LIMITER_RESULT: path => `${purifyFilepath(encodeURIComponent(path))}_LR`,
     LIMITER_DATA: path => `${purifyFilepath(encodeURIComponent(path))}_LD`,
     DB_COUNT_QUERY: path => `${purifyFilepath(encodeURIComponent(path))}_QC`,

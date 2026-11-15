@@ -1,9 +1,8 @@
 import { ServerReachableListener, StoreReadyListener } from "./listeners";
 import { CacheStore, Scoped } from "./variables";
 import { parseToken, serializeE2E } from "./peripherals";
-import { DatastoreParser } from "../products/database/bson";
 import { deserialize } from "entity-serializer";
-import { breakDbMap, purgeRedundantRecords } from "./purger";
+import { purgeRedundantRecords } from "./purger";
 import { FS_PATH, getSystem } from "./fs_manager";
 import { Buffer } from "buffer";
 import { basicClone } from "./basic_clone";
@@ -14,28 +13,14 @@ const { FILE_NAME, TABLE_NAME } = FS_PATH;
 
 const CacheKeys = Object.keys(CacheStore);
 
-const prefillDatastore = (obj, caller) => {
-    obj = basicClone(obj);
-    breakDbMap(obj, (_projectUrl, _dbUrl, _dbName, _path, value) => {
-        Object.entries(value.instance).forEach(([access_id, obj]) => {
-            value.instance[access_id] = caller(obj);
-        });
-        Object.entries(value.episode).forEach(([_access_id, limitObj]) => {
-            Object.entries(limitObj).forEach(([limit, obj]) => {
-                limitObj[limit] = caller(obj);
-            });
-        });
-    });
-    return obj;
-};
-
 const prefillFetcher = (store, encode) => {
     store = basicClone(store);
     Object.values(store).forEach(accessIdObj => {
         Object.values(accessIdObj).forEach(value => {
-            value.data.buffer = encode ?
-                Buffer.from(value.data.buffer).toString('base64')
-                : Buffer.from(value.data.buffer, 'base64');
+            value.data.buffer =
+                encode
+                    ? Buffer.from(value.data.buffer).toString('base64')
+                    : Buffer.from(value.data.buffer, 'base64');
         });
     });
     return store;
@@ -49,7 +34,6 @@ export const updateCacheStore = async (node) => {
         AuthStore,
         EmulatedAuth,
         PendingAuthPurge,
-        DatabaseStore,
         PendingWrites,
         FetchedStore,
         ...restStore
@@ -71,7 +55,6 @@ export const updateCacheStore = async (node) => {
             EmulatedAuth,
             PendingAuthPurge,
             ...promoteCache ? {
-                DatabaseStore: prefillDatastore(DatabaseStore, DatastoreParser.encode),
                 PendingWrites: minimizePendingWrite(),
                 FetchedStore: prefillFetcher(FetchedStore, true)
             } : {},
@@ -107,11 +90,6 @@ export const releaseCacheStore = async (builder) => {
         if (io) {
             data = JSON.parse((await io.input()) || '{}');
 
-            if (data.DatabaseStore)
-                data.DatabaseStore = prefillDatastore(
-                    data.DatabaseStore,
-                    r => DatastoreParser.decode(r, false)
-                );
             if (data.FetchedStore)
                 data.FetchedStore = prefillFetcher(data.FetchedStore, false);
         } else {

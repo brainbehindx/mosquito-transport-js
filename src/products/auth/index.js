@@ -1,9 +1,10 @@
+import { Platform } from "react-native";
 import { io } from "socket.io-client";
 import EngineApi from "../../helpers/engine_api";
 import { awaitReachableServer, awaitStore, buildFetchInterface, buildFetchResult, updateAuthData, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
 import { awaitRefreshToken, getEmulatedLinks, initTokenRefresher, injectEmulatedAuth, injectFreshToken, listenToken, triggerAuthToken } from "./accessor";
-import { deserializeE2E, encodeBinary, parseToken, serializeE2E } from "../../helpers/peripherals";
+import { deserializeE2E, parseToken, serializeE2E } from "../../helpers/peripherals";
 import { simplifyCaughtError, simplifyError } from "simplify-error";
 import { basicClone } from "../../helpers/basic_clone";
 
@@ -113,15 +114,17 @@ export default class MTAuth {
         return refreshToken && parseToken(refreshToken);
     }
 
-    getAuthToken = () => new Promise(resolve => {
-        const l = listenToken(t => {
-            l();
-            resolve(t || null);
-        }, this.builder.projectUrl);
-    });
+    getAuthToken = () =>
+        new Promise(resolve => {
+            const l = listenToken(t => {
+                l();
+                resolve(t || null);
+            }, this.builder.projectUrl);
+        });
 
     listenAuth = (callback) => {
         let hasTrig;
+        let acrData;
         const forceChangedNode = [['entityOf'], ['passwordVerified'], ['disabled'], ['authVerified'], ['sub'], ['email']];
 
         return listenToken((t, initToken) => {
@@ -129,6 +132,7 @@ export default class MTAuth {
             const parseData = t && parseToken(t);
 
             if (
+                acrData !== (acrData = JSON.stringify(parseData?.acr ?? null)) ||
                 !hasTrig ||
                 forceChangedNode.some(([k, v]) => parseData?.[k] !== v) ||
                 initToken
@@ -149,12 +153,13 @@ export default class MTAuth {
         }, this.builder.projectUrl);
     }
 
-    getAuth = () => new Promise(resolve => {
-        const l = this.listenAuth(d => {
-            l();
-            resolve(d);
+    getAuth = () =>
+        new Promise(resolve => {
+            const l = this.listenAuth(d => {
+                l();
+                resolve(d);
+            });
         });
-    });
 
     signOut = () => doSignOut(this.builder);
 
@@ -163,6 +168,9 @@ export default class MTAuth {
     emulate = async (projectUrl) => {
         await injectEmulatedAuth(this.builder, projectUrl);
     }
+
+    upgrade = (input) =>
+        initTokenRefresher({ config: this.builder, forceRefresh: true, upgrade: { input } });
 };
 
 const doCustomSignin = (builder, email, password) => new Promise(async (resolve, reject) => {
@@ -172,12 +180,13 @@ const doCustomSignin = (builder, email, password) => new Promise(async (resolve,
         await awaitStore();
         const thisAuthStore = basicClone(CacheStore.AuthStore[projectUrl]);
 
-        const [reqBuilder, [privateKey]] = await buildFetchInterface({
-            body: { data: `${encodeBinary(email)}.${encodeBinary(password)}` },
-            serverE2E_PublicKey,
-            uglify,
-            extraHeaders
-        });
+        const [reqBuilder, [privateKey]] =
+            await buildFetchInterface({
+                body: { data: { email, password }, platform: Platform.OS },
+                serverE2E_PublicKey,
+                uglify,
+                extraHeaders
+            });
 
         const data = await buildFetchResult(await fetch(_customSignin(projectUrl, uglify), reqBuilder), uglify);
 
@@ -205,8 +214,9 @@ const doCustomSignup = (builder, email, password, name, metadata) => new Promise
 
         const [reqBuilder, [privateKey]] = await buildFetchInterface({
             body: {
-                data: `${encodeBinary(email)}.${encodeBinary(password)}.${(encodeBinary((name || '').trim()))}`,
+                data: { email, password, name: name.trim() },
                 metadata,
+                platform: Platform.OS
             },
             serverE2E_PublicKey,
             uglify,
@@ -316,7 +326,7 @@ const doProviderSignin = (builder, token, metadata, endpointer) => new Promise(a
         const thisAuthStore = basicClone(CacheStore.AuthStore[projectUrl]);
 
         const [reqBuilder, [privateKey]] = await buildFetchInterface({
-            body: { token, metadata },
+            body: { token, metadata, platform: Platform.OS },
             uglify,
             serverE2E_PublicKey,
             extraHeaders

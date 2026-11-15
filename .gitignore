@@ -87,3 +87,4 @@ nitrogen/
 
 # extras
 yarn.lock
+.yarn

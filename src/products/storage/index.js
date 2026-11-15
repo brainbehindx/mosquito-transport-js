@@ -53,7 +53,7 @@ export class MTStorage {
             return promise;
         }
 
-        const processID = `${++Scoped.StorageProcessID}`;
+        const processID = `${++Scoped.AnyProcessIte}`;
         const init = async () => {
             if (awaitServer) await awaitReachableServer(projectUrl);
             await awaitRefreshToken(projectUrl);
@@ -151,7 +151,7 @@ export class MTStorage {
         file = isAsset ? file.trim() : prefixStoragePath(file.trim());
 
         const { projectUrl, uglify, extraHeaders } = this.builder;
-        const processID = `${++Scoped.StorageProcessID}`;
+        const processID = `${++Scoped.AnyProcessIte}`;
         const thisProjectUrl = options?.projectUrl || projectUrl;
 
         const init = async () => {

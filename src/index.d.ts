@@ -1,4 +1,3 @@
-import { BSON } from "./vendor/bson";
 
 export interface RNMTConfig {
     dbName?: string;
@@ -30,12 +29,6 @@ export interface RNMTConfig {
     extraHeaders?: {
         [key: string]: string
     };
-    /**
-     * true to deserialize BSON values to their Node.js closest equivalent types
-     * 
-     * @default true
-     */
-    castBSON?: boolean;
 }
 
 export interface GetDatabase {
@@ -76,8 +69,6 @@ export class DoNotEncrypt {
     constructor(value: any);
     value: any;
 }
-
-export { BSON }
 
 interface auth_provider_id {
     GOOGLE: 'google';
@@ -470,7 +461,10 @@ export interface RNMTAuth {
     signOut: () => Promise<void>;
     forceRefreshToken: () => Promise<string>;
     emulate: (projectUrl?: string) => Promise<void>;
+    upgrade: (input: any) => Promise<string>;
 }
+
+export function initializeTweetNACL(pkg: unknown): void;
 
 export interface SigninResult {
     user: AuthData;
@@ -482,6 +476,8 @@ export interface SignupResult extends SigninResult {
     isNewUser: boolean;
 }
 
+type Platform = "ios" | "android" | "macos" | "windows" | "web";
+
 export interface AuthData {
     email?: string;
     metadata: Object;
@@ -492,6 +488,8 @@ export interface AuthData {
     claims: Object;
     authVerified: boolean;
     passwordVerified?: boolean | undefined;
+    signupWith: Platform;
+    platform: Platform;
     tokenID: string;
     disabled: boolean;
     entityOf: string;
@@ -503,6 +501,7 @@ export interface AuthData {
     aud: string;
     iss: string;
     sub: string;
+    acr?: any;
 }
 
 export interface RefreshTokenData {

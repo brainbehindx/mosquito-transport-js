@@ -18,6 +18,7 @@ const apis = {
     _githubSignin: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_githubSignin'),
     _signOut: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_signOut'),
     _refreshAuthToken: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_refreshAuthToken'),
+    _upgrade_auth_token: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_upgrade_auth_token'),
     _uploadFile: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_uploadFile'),
     _deleteFile: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_deleteFile'),
     _deleteFolder: (baseApi, ugly) => EngineApiBase(baseApi, ugly, '_deleteFolder'),

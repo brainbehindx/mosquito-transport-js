@@ -1,9 +1,13 @@
 import { guardArray, GuardError, guardObject, GuardSignal, niceGuard, Validator } from "guard-object";
-import { sameInstance } from "../../helpers/peripherals";
 import { RETRIEVAL } from "../../helpers/values";
-import { Binary, BSONRegExp, BSONSymbol, Code, DBRef, Decimal128, Double, Int32, Long, MaxKey, MinKey, ObjectId, Timestamp, UUID } from '../../vendor/bson';
-import { bboxPolygon, booleanIntersects, booleanWithin, circle, distance, polygon } from "@turf/turf";
+import { bboxPolygon } from '@turf/bbox-polygon';
+import { booleanIntersects } from '@turf/boolean-intersects';
+import { booleanWithin } from '@turf/boolean-within';
+import { circle } from '@turf/circle';
+import { distance } from '@turf/distance';
+import { polygon } from "@turf/helpers";
 import { grab } from "poke-object";
+import { Buffer } from "buffer";
 
 const DirectionList = [1, -1, 'asc', 'desc', 'ascending', 'descending'];
 const FilterFootPrint = t => {
@@ -144,113 +148,79 @@ export const confirmFilterDoc = (data, filter) => {
 
 const plumeDoc = doc => [doc, ...Array.isArray(doc) ? doc : []];
 
-export const defaultBSON = (value, instance) => {
-    try {
-        return instance.constructor(value);
-    } catch (_) {
-        return value;
-    }
-};
-
-export const downcastBSON = d => {
-    if (d instanceof BSONRegExp)
-        return new RegExp(d.pattern, d.options);
-    if (
-        [
-            Long,
-            Double,
-            Int32,
-            Decimal128
-        ].some(v => d instanceof v)
-    ) return d * 1;
-    return d;
-};
-
-const isBasicBSON = d =>
-    [
-        Code,
-        ObjectId,
-        Binary,
-        MaxKey,
-        MinKey,
-        UUID,
-        Timestamp,
-        BSONSymbol
-    ].some(v => d instanceof v);
-
 export const CompareBson = {
     equal: (doc, q, explicit) => {
-        doc = downcastBSON(doc);
-        q = downcastBSON(q);
-
-        if (
-            isBasicBSON(q) ||
-            isBasicBSON(doc)
-        ) {
-            return sameInstance(doc, q) &&
-                JSON.stringify(doc) === JSON.stringify(q);
-        }
-
         if (q instanceof RegExp) {
-            return sameInstance(doc, q) ?
-                (doc.source === q.source && doc.flags === q.flags) :
-                (explicit && typeof doc === 'string' && q.test(doc));
+            return doc instanceof RegExp
+                ? (doc.source === q.source && doc.flags === q.flags)
+                : (explicit && typeof doc === 'string' && q.test(doc));
         }
+
         return JSON.stringify(doc) === JSON.stringify(q)
     },
     greater: (doc, q) => {
-        doc = downcastBSON(doc);
-        q = downcastBSON(q);
-
-        if (doc instanceof Timestamp || q instanceof Timestamp) {
-            return sameInstance(doc, q) && doc.greaterThan(q);
-        }
-
-        return typeof doc === typeof q && ![q, doc].some(v => Array.isArray(v) || Validator.OBJECT(v)) && doc > q;
+        return typeof doc === typeof q &&
+            ![q, doc].some(v => Array.isArray(v) || Validator.OBJECT(v)) &&
+            doc > q;
     },
     lesser: (doc, q) => {
-        doc = downcastBSON(doc);
-        q = downcastBSON(q);
-
-        if (doc instanceof Timestamp || q instanceof Timestamp) {
-            return sameInstance(doc, q) && doc.lessThan(q);
-        }
-
-        return typeof doc === typeof q && ![q, doc].some(v => Array.isArray(v) || Validator.OBJECT(v)) && doc < q;
-    },
+        return typeof doc === typeof q &&
+            ![q, doc].some(v => Array.isArray(v) || Validator.OBJECT(v)) &&
+            doc < q;
+    }
 };
 
 const BsonTypeMap = {
-    double: [1, d => d instanceof Double],
+    double: [1, d => Validator.NUMBER(d) || typeof d?.$numberDouble === 'string'],
     string: [2, d => typeof d === 'string'],
     object: [3, d => Validator.OBJECT(d)],
     array: [4, d => Array.isArray(d)],
-    binData: [5, d => d instanceof Binary],
-    objectId: [7, d => d instanceof ObjectId],
+    binData: [5, d => Buffer.isBuffer(d) || typeof d?.$binary?.base64 === 'string'],
+    objectId: [7, d =>
+        typeof d?.$oid === 'string' ||
+        (typeof d === 'string' && validateHexString(d))
+    ],
     bool: [8, d => typeof d === 'boolean'],
-    date: [9, d => d instanceof Date],
+    date: [9, d => d instanceof Date || d?.$date?.$numberLong],
     null: [10, d => d === null],
-    regex: [11, d => d instanceof RegExp || d instanceof BSONRegExp],
-    dbPointer: [12, d => d instanceof DBRef],
-    javascript: [13, d => d instanceof Code],
-    symbol: [14, d => d instanceof BSONSymbol],
-    int: [16, d => d instanceof Int32],
-    timestamp: [17, d => d instanceof Timestamp],
-    long: [18, d => d instanceof Long],
-    decimal: [19, d => d instanceof Decimal128],
-    minKey: [-1, d => d instanceof MinKey],
-    maxKey: [127, d => d instanceof MaxKey],
-    number: [undefined, d => d instanceof Double ||
-        d instanceof Int32 ||
-        d instanceof Long ||
-        d instanceof Decimal128 ||
-        Validator.NUMBER(d)]
+    regex: [11, d => d instanceof RegExp || Validator.OBJECT(d?.$regularExpression)],
+    dbPointer: [12, d =>
+        (typeof d?.$ref === 'string' && d?.$id) ||
+        (typeof d?.$dbPointer?.$ref === 'string' && typeof d?.$dbPointer?.$id === 'string')
+    ],
+    javascript: [13, d => typeof d?.code === 'string' || typeof d?.$code === 'string'],
+    symbol: [14, d => typeof d?.$symbol === 'string'],
+    int: [16, d => Validator.INTEGER(d) || !!(d?.$numberInt || d?.$numberLong)],
+    timestamp: [17, d => !!d?.$timestamp],
+    long: [18, d => typeof d?.$numberLong === 'string' || Validator.INTEGER(d)],
+    decimal: [19, d => typeof d?.$numberDecimal === 'string'],
+    minKey: [-1, d => d?.$minKey === 1],
+    maxKey: [127, d => d?.$maxKey === 1],
+    number: [undefined, d =>
+        BsonTypeMap.decimal[1](d) ||
+        Validator.NUMBER(d)
+    ]
 };
 
 const COORDINATE_GUARD = [
     GuardSignal.COORDINATE.LONGITUDE_INT,
     GuardSignal.COORDINATE.LATITUDE_INT
 ];
+
+function validateHexString(string) {
+    if (string?.length !== 24)
+        return false;
+    for (let i = 0; i < 24; i++) {
+        const char = string.charCodeAt(i);
+        if ((char >= 48 && char <= 57) ||
+            (char >= 97 && char <= 102) ||
+            (char >= 65 && char <= 70)) {
+            continue;
+        }
+        return false;
+    }
+    return true;
+}
 
 const validateGeoNear = q =>
     guardObject({
@@ -311,19 +281,16 @@ const FilterUtils = {
         if (q === undefined) return false;
         return plumeDoc(doc).some(docx => {
             if (q in BsonTypeMap) {
-                return BsonTypeMap[q][1](docx);
+                return !!BsonTypeMap[q][1](docx);
             }
             const c = Object.entries(BsonTypeMap).find(([_, v]) => v[0] === q);
-            if (c) return c[1][1](docx);
+            if (c) return !!c[1][1](docx);
             if (typeof q === 'number') throw `Invalid numerical type code: ${q}`;
             throw `Unknown type name alias: ${q}`;
         });
     },
 
     $regex: (doc, q) => {
-        doc = downcastBSON(doc);
-        q = downcastBSON(q);
-
         return plumeDoc(doc).some(docx => {
             if (q instanceof RegExp) {
                 return typeof docx === 'string' ? q.test(docx) :

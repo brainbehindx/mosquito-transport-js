@@ -8,6 +8,10 @@ import com.mosquitotransport.utils.FileUploader
 import com.mosquitotransport.utils.UploadCallback
 import javax.annotation.Nonnull
 import android.os.SystemClock
+import java.io.UnsupportedEncodingException
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
+import java.security.NoSuchAlgorithmException
 
 class MosquitoTransportModule(reactContext: ReactApplicationContext) :
   NativeMosquitoTransportSpec(reactContext) {
@@ -21,6 +25,14 @@ class MosquitoTransportModule(reactContext: ReactApplicationContext) :
 
   companion object {
     const val NAME = NativeMosquitoTransportSpec.NAME
+  }
+
+  @Throws(NoSuchAlgorithmException::class, UnsupportedEncodingException::class)
+  private fun buildHash(toHash: String, algo: String, length: Int): String {
+    val md = MessageDigest.getInstance(algo)
+    md.update(toHash.toByteArray(StandardCharsets.UTF_8))
+    val digest = md.digest()
+    return String.format("%0${length}x", java.math.BigInteger(1, digest))
   }
 
   override fun addListener(eventType: String) {
@@ -40,6 +52,15 @@ class MosquitoTransportModule(reactContext: ReactApplicationContext) :
   override fun getSystemUptime(promise: Promise) {
     val uptime = SystemClock.elapsedRealtime().toDouble()
     promise.resolve(uptime)
+  }
+
+  override fun sha256(toHash: String, promise: Promise) {
+    try {
+      val hash = buildHash(toHash, "SHA-256", 64)
+      promise.resolve(hash)
+    } catch (e: Exception) {
+      promise.reject("Exception", "out of memory")
+    }
   }
 
   private val uploaderMap = ArrayMap<String, FileUploader>()
