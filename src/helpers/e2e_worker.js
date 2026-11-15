@@ -1,7 +1,5 @@
 import LimitTask from "limit-task";
-import naclPkg from 'tweetnacl-functional';
-
-const { NACL } = naclPkg;
+import { PACKAGES } from "./variables";
 
 function e2e_baseCode() {
     const serializeE2E = (data, serverPublicKey) => {
@@ -44,8 +42,12 @@ function e2e_baseCode() {
     };
 }
 
-const workerCode = `
-   const NACL_PKG = ${NACL.toString()};
+let workerCode;
+
+const spawnWorker = () => {
+    if (!workerCode) {
+        workerCode = `
+   const NACL_PKG = ${PACKAGES.tweetnacl.NACL.toString()};
    const naclPkg = {};
 
    NACL_PKG(naclPkg);
@@ -55,8 +57,8 @@ const workerCode = `
    const baseCode = ${e2e_baseCode.toString()};
    baseCode();
 `;
+    }
 
-const spawnWorker = () => {
     const resolution = {};
     let ite = 0;
     const blob = new Blob([workerCode], { type: 'application/javascript' });
@@ -73,16 +75,45 @@ const spawnWorker = () => {
         delete resolution[session];
     };
 
+    let closureError;
+    const rejectPendingTasks = () => {
+        const pendTasks = Object.entries(resolution);
+        for (const [session, [_, reject]] of pendTasks) {
+            delete resolution[session];
+            reject(closureError?.error);
+        }
+
+        if (pendTasks.length) setTimeout(rejectPendingTasks, 90);
+
+        for (let i = 0; i < e2e_engines.length; i++) {
+            const thatCallback = e2e_engines[i];
+
+            if (thatCallback === callback) {
+                e2e_engines.splice(i, 1);
+                currentTask = 0;
+                break;
+            }
+        }
+    };
+
+    worker.onerror = err => {
+        closureError = { error: err };
+        rejectPendingTasks(err);
+    }
+
     const queue = LimitTask(3);
 
-    return (type, params) => queue(() =>
-        new Promise((resolve, reject) => {
-            const session = `${++ite}`;
+    const callback = (type, params) =>
+        queue(() =>
+            new Promise((resolve, reject) => {
+                const session = `${++ite}`;
 
-            resolution[session] = [resolve, reject];
-            worker.postMessage({ type, params, session });
-        })
-    );
+                resolution[session] = [resolve, reject];
+                worker.postMessage({ type, params, session });
+            })
+        );
+
+    return callback;
 };
 
 let currentTask = -1;

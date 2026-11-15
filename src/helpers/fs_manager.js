@@ -4,8 +4,8 @@ import { CACHE_STORAGE_PATH } from "./values";
 
 const PRIMARY_KEY = 'primary_key';
 const SUB_TABLE = {
-    METADATA: p => `${p}:META`,
-    DATA: p => `${p}:DATA`
+    METADATA: p => `${p}:ZB_META`,
+    DATA: p => `${p}:ZB_DATA`
 };
 
 /**

@@ -1,6 +1,5 @@
 import { initTokenRefresher, triggerAuthToken } from "../products/auth/accessor";
 import { notifyDatabaseNodeChanges, revertChanges, syncCache } from "../products/database/accessor";
-import { deserializeBSON } from "../products/database/bson";
 import { TokenRefreshListener } from "./listeners";
 import { awaitStore } from "./utils";
 import { CacheStore, Scoped } from "./variables";
@@ -27,10 +26,8 @@ broadcaster.onmessage = async (e) => {
 
         const newBuilder = {
             ...Scoped.InitializedProject[builder.projectUrl],
-            ...builder,
-            find: deserializeBSON(builder.find, false)._
+            ...builder
         };
-        result.value = deserializeBSON(result.value, false)._;
 
         const { editions, pathChanges } = await syncCache(newBuilder, result);
         Scoped.broadcastedWrites[writeId] = { editions, builder: newBuilder };

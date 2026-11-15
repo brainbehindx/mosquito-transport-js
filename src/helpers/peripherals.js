@@ -1,11 +1,8 @@
 import { Buffer } from "buffer";
-import naclPkg from 'tweetnacl-functional';
 import e2e_worker from "./e2e_worker";
 import { deserialize, serialize } from "entity-serializer";
 import { grab } from "poke-object";
-import { Scoped } from "./variables";
-
-const { box, randomBytes } = naclPkg;
+import { Scoped, PACKAGES } from "./variables";
 
 export const prefixStoragePath = (path, prefix = 'file:///') => {
     let cleanedPath = path.replace(/^[^/]+:\/{1,3}/, '');
@@ -51,6 +48,10 @@ export function sortArrayByObjectKey(arr = [], key) {
 };
 
 export async function niceHash(str = '') {
+    if (typeof str !== 'string') {
+        str = (Buffer.isBuffer(str) ? str : serialize(str)).toString('base64');
+    }
+
     try {
         // Convert the string to a Uint8Array
         const encoder = new TextEncoder();
@@ -62,20 +63,53 @@ export async function niceHash(str = '') {
         // Convert to base64
         return Buffer.from(new Uint8Array(hashBuffer)).toString('base64');
     } catch (_) {
-        return str;
+        return fnv64Hash(str);
     }
 };
 
-export const sameInstance = (var1, var2) => {
-    try {
-        return var1.constructor === var2.constructor &&
-            Object.getPrototypeOf(var1) === Object.getPrototypeOf(var2)
-    } catch (_) {
-        return false;
+export function fnv64Hash(str) {
+    if (typeof str !== 'string') {
+        str = (Buffer.isBuffer(str) ? str : serialize(str)).toString('base64');
     }
+
+    let hi = 0xcbf29ce4 | 0;
+    let lo = 0x84222325 | 0;
+
+    for (let i = 0; i < str.length; i++) {
+        lo ^= str.charCodeAt(i);
+
+        // Multiply by FNV prime: 0x00000100000001B3
+        const low = lo >>> 0;
+        const high = hi >>> 0;
+
+        const product = low * 0x1b3;
+
+        const newLo = product >>> 0;
+        const carry = Math.floor(product / 0x100000000);
+
+        hi = (high * 0x1b3 + low * 0x100 + carry) | 0;
+        lo = newLo | 0;
+    }
+
+    return (
+        (hi >>> 0).toString(16).padStart(8, '0') +
+        (lo >>> 0).toString(16).padStart(8, '0')
+    );
 };
+
+const validateTweetNaclPkg = () => {
+    if (!PACKAGES.tweetnacl)
+        throw `tweetnacl has not been initialize, kindly initialize via 'initializeTweetNACL(nacl_package)'`;
+
+    const { box, randomBytes } = PACKAGES.tweetnacl;
+
+    if (typeof randomBytes !== 'function' || !box)
+        throw `tweetnacl was initialize incorrectly, make sure you pass a valid tweetnacl package to 'initializeTweetNACL'`;
+}
 
 export const serializeE2E = async (data, auth_token, serverPublicKey) => {
+    validateTweetNaclPkg();
+
     const inputData = serialize([data, auth_token]);
 
     if (inputData.byteLength > 10240) {
@@ -88,8 +122,10 @@ export const serializeE2E = async (data, auth_token, serverPublicKey) => {
         ];
     }
 
-    const pair = box.keyPair(),
-        nonce = randomBytes(box.nonceLength);
+    const { box, randomBytes } = PACKAGES.tweetnacl;
+
+    const pair = box.keyPair();
+    const nonce = randomBytes(box.nonceLength);
 
     return [
         serialize([
@@ -109,6 +145,8 @@ export const serializeE2E = async (data, auth_token, serverPublicKey) => {
 };
 
 export const deserializeE2E = async (data, serverPublicKey, clientPrivateKey) => {
+    validateTweetNaclPkg();
+
     const [binaryNonce, binaryData] = deserialize(data);
     let baseArray;
 
@@ -116,6 +154,8 @@ export const deserializeE2E = async (data, serverPublicKey, clientPrivateKey) =>
         // dispatch to background thread
         baseArray = await e2e_worker.decrypt(binaryData, binaryNonce, serverPublicKey, clientPrivateKey);
     } else {
+        const { box } = PACKAGES.tweetnacl;
+
         baseArray = box.open(binaryData, binaryNonce, serverPublicKey, clientPrivateKey);
     }
 

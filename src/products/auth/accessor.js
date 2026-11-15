@@ -124,7 +124,7 @@ export const listenTokenReady = (callback, projectUrl) => {
     }
 }
 
-export const initTokenRefresher = async ({ config, forceRefresh, justCheck }) => {
+export const initTokenRefresher = async ({ config, forceRefresh, justCheck, upgrade }) => {
     const { projectUrl, maxRetries } = config;
     if (!Scoped.IsStoreReady) await awaitStore();
     const { token } = CacheStore.AuthStore[projectUrl] || {};
@@ -144,14 +144,26 @@ export const initTokenRefresher = async ({ config, forceRefresh, justCheck }) =>
     if (token) {
         const rizz = () => {
             let runningProcess = Scoped.TokenRefreshProcess[projectUrl];
-            if (!runningProcess) {
-                runningProcess = refreshToken(config, maxRetries, forceRefresh);
+
+            if (!runningProcess || upgrade) {
+                if (runningProcess) {
+                    runningProcess =
+                        runningProcess
+                            .catch(() => 0)
+                            .then(() => refreshToken(config, maxRetries, upgrade));
+                } else {
+                    runningProcess = refreshToken(config, maxRetries, upgrade);
+                }
+
                 Scoped.TokenRefreshProcess[projectUrl] = runningProcess;
 
-                Scoped.TokenRefreshProcess[projectUrl].finally(() => {
-                    delete Scoped.TokenRefreshProcess[projectUrl];
+                runningProcess.finally(() => {
+                    if (Scoped.TokenRefreshProcess[projectUrl] === runningProcess) {
+                        delete Scoped.TokenRefreshProcess[projectUrl];
+                    }
                 });
             }
+
             return runningProcess;
         }
 
@@ -177,6 +189,8 @@ export const initTokenRefresher = async ({ config, forceRefresh, justCheck }) =>
     } else {
         notifyAuthReady(true);
         if (justCheck) return true;
+
+        if (upgrade) throw new Error('Cannot upgrade empty authentication token');
     }
 };
 
@@ -209,43 +223,56 @@ export const getEmulatedLinks = (projectUrl) =>
         .filter(([_, v]) => v === projectUrl)
         .map(v => v[0]);
 
-const refreshToken = (builder, remainRetries = 3) =>
+const refreshToken = (builder, remainRetries = 3, upgrade) =>
     new Promise(async (resolve, reject) => {
         const { projectUrl, serverE2E_PublicKey, uglify, extraHeaders } = builder;
 
         try {
             const { token, refreshToken: r_token } = CacheStore.AuthStore[projectUrl];
 
-            const [reqBuilder, [privateKey]] = await buildFetchInterface({
-                body: { token, r_token },
-                uglify,
-                serverE2E_PublicKey,
-                extraHeaders
-            });
+            const [reqBuilder, [privateKey]] =
+                await buildFetchInterface({
+                    body: { token, r_token, ...upgrade ? { data: upgrade.input } : {} },
+                    uglify,
+                    serverE2E_PublicKey,
+                    extraHeaders
+                });
 
-            const data = await buildFetchResult(await fetch(EngineApi._refreshAuthToken(projectUrl, uglify), reqBuilder), uglify);
+            const endpoint_url =
+                (upgrade ? EngineApi._upgrade_auth_token : EngineApi._refreshAuthToken)(projectUrl, uglify);
 
-            const f = uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data;
+            const request = await fetch(endpoint_url, reqBuilder);
+
+            const data = await buildFetchResult(request, uglify);
+
+            const { result } = uglify ? await deserializeE2E(data, serverE2E_PublicKey, privateKey) : data;
 
             if (!CacheStore.AuthStore[projectUrl]) {
                 reject(simplifyError('token_not_mounted', 'No refresh token was mounted or has been recently removed').simpleError);
                 return;
             }
 
-            CacheStore.AuthStore[projectUrl].token = f.result.token;
-            updateAuthData(projectUrl, f.result.token);
-            await updateTokenTimestamp(projectUrl, f.result.token);
+            CacheStore.AuthStore[projectUrl].token = result.token;
+            if (upgrade && result.refreshToken)
+                CacheStore.AuthStore[projectUrl].refreshToken = result.refreshToken;
 
-            resolve(f.result.token);
+            updateAuthData(projectUrl, result.token);
+            const emulationList = getEmulatedLinks(projectUrl);
+
+            emulationList.forEach(v => {
+                CacheStore.AuthStore[v] = basicClone(CacheStore.AuthStore[projectUrl]);
+                updateAuthData(v, result.token);
+            });
+
+            await updateTokenTimestamp(projectUrl, result.token);
+
+            resolve(result.token);
             const isInit = !Scoped.InitiatedForcedToken[projectUrl];
 
             triggerAuthToken(projectUrl, isInit);
             if (isInit) Scoped.InitiatedForcedToken[projectUrl] = true;
 
-            getEmulatedLinks(projectUrl).forEach(v => {
-                CacheStore.AuthStore[v] = basicClone(CacheStore.AuthStore[projectUrl]);
-                updateAuthData(v, f.result.token);
-
+            emulationList.forEach(v => {
                 triggerAuthToken(v, isInit);
                 if (isInit) Scoped.InitiatedForcedToken[v] = true;
             });
@@ -254,9 +281,15 @@ const refreshToken = (builder, remainRetries = 3) =>
         } catch (e) {
             if (e.simpleError) {
                 console.error(`refreshToken error: ${e.simpleError?.message}`);
-                doSignOut({ ...builder });
+                if (upgrade) {
+                    initTokenRefresher({ config: builder });
+                } else doSignOut({ ...builder });
                 reject(e.simpleError);
             } else if (remainRetries <= 0) {
+                setTimeout(() => {
+                    initTokenRefresher({ config: builder });
+                }, 3000);
+
                 reject(
                     simplifyError('retry_limit_reached', 'The retry limit has been reach and execution prematurely stopped').simpleError
                 );

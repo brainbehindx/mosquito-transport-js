@@ -1,6 +1,6 @@
-import { deserializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible, serializeE2E, parseToken } from "./helpers/peripherals";
+import { deserializeE2E, parseToken, serializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible } from "./helpers/peripherals";
 import { awaitReachableServer, awaitStore, checkAreYouOk, listenReachableServer, releaseCacheStore } from "./helpers/utils";
-import { CacheStore, Scoped } from "./helpers/variables";
+import { CacheStore, PACKAGES, Scoped } from "./helpers/variables";
 import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener } from "./helpers/listeners";
@@ -14,7 +14,6 @@ import { Validator } from 'guard-object';
 import sendMessage from "./helpers/broadcaster";
 import { Buffer } from 'buffer';
 import MTAuth, { purgePendingToken } from './products/auth';
-import { BSON } from "bson";
 import { basicClone } from './helpers/basic_clone';
 
 const {
@@ -43,7 +42,6 @@ export class MosquitoTransport {
             dbName: config.dbName || '',
             dbUrl: config.dbUrl || '',
             serverE2E_PublicKey: config.serverE2E_PublicKey && new Uint8Array(Buffer.from(config.serverE2E_PublicKey, 'base64')),
-            castBSON: config.castBSON === undefined || config.castBSON,
             maxRetries: config.maxRetries || 3,
             uglify: config.enableE2E_Encryption
         };
@@ -590,10 +588,6 @@ const ConfigValidator = {
         if (typeof v !== 'boolean' && v !== undefined)
             throw `Invalid value supplied to enableE2E_Encryption, value must be a boolean`;
     },
-    castBSON: v => {
-        if (typeof v !== 'boolean')
-            throw `Invalid value supplied to castBSON, value must be a boolean`;
-    },
     borrowToken: v => {
         if (typeof v !== 'string' || (!Validator.HTTPS(v) && !Validator.HTTP(v)))
             throw `Expected "borrowToken" to be valid https or http link but got "${v}"`;
@@ -628,6 +622,10 @@ const validateMTConfig = (config, that) => {
     if (!config.projectUrl) throw `projectUrl is a required property in ${that.constructor.name}() constructor`;
 }
 
+export const initializeTweetNACL = (pkg) => {
+    PACKAGES.tweetnacl = pkg;
+}
+
 export {
     DoNotEncrypt,
     TIMESTAMP,
@@ -636,6 +634,5 @@ export {
     FIND_GEO_JSON,
     GEO_JSON,
     parseToken,
-    AUTH_PROVIDER_ID,
-    BSON
+    AUTH_PROVIDER_ID
 };
