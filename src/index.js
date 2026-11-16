@@ -565,10 +565,6 @@ const ConfigValidator = {
         if (typeof v !== 'boolean' && v !== undefined)
             throw `Invalid value supplied to enableE2E_Encryption, value must be a boolean`;
     },
-    borrowToken: v => {
-        if (typeof v !== 'string' || (!Validator.HTTPS(v) && !Validator.HTTP(v)))
-            throw `Expected "borrowToken" to be valid https or http link but got "${v}"`;
-    },
     serverE2E_PublicKey: (v) => {
         if (v !== undefined && (typeof v !== 'string' || !v.trim()))
             throw `Invalid value supplied to serverETE_PublicKey, value must be a non-empty string`;

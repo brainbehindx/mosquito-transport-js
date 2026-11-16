@@ -627,17 +627,19 @@ const findObject = async (builder, initConfig) => {
     let retries = 0, hasFinalize;
 
     const readValue = () => new Promise(async (resolve, reject) => {
-        const retryProcess = ++retries,
-            instantProcess = retryProcess === 1;
+        const retryProcess = ++retries;
+        const isInitial = retryProcess === 1;
 
         const finalize = (a, b) => {
-            const res = (instantProcess && a) ? intruder ? (a[0] || undefined) : a[0] : a;
             const doClone = v => intruder ? basicClone(v) : v;
 
-            if (a) {
-                resolve(instantProcess ? doClone(res) : a);
-            } else reject(instantProcess ? doClone(b) : b);
-            if (hasFinalize || !instantProcess) return;
+            if (isInitial) {
+                if (a) {
+                    resolve(doClone(a[0]));
+                } else reject(doClone(b));
+            } else resolve([a, b]);
+
+            if (hasFinalize || !isInitial) return;
             hasFinalize = true;
 
             if (enableMinimizer) {
@@ -647,18 +649,19 @@ const findObject = async (builder, initConfig) => {
                     delete Scoped.PendingDbReadCollective[processAccessId];
 
                 resolutionList.forEach(e => {
-                    e(a ? { result: doClone(res) } : undefined, doClone(b));
+                    e(a ? [doClone(a[0])] : undefined, doClone(b));
                 });
             }
         };
 
         try {
-            if (instantProcess) {
+            if (isInitial) {
                 if (enableMinimizer) {
                     if (Scoped.PendingDbReadCollective[processAccessId]) {
                         Scoped.PendingDbReadCollective[processAccessId].push((a, b) => {
-                            if (a) resolve(a.result);
-                            else reject(b);
+                            if (a) {
+                                resolve(a[0]);
+                            } else reject(b);
                         });
                         return;
                     }
@@ -708,8 +711,10 @@ const findObject = async (builder, initConfig) => {
             finalize([result]);
         } catch (e) {
             let thisRecord;
-            const getThisRecord = async () => thisRecord ? thisRecord[0] :
-                (thisRecord = [await getRecordData()])[0];
+            const getThisRecord = async () =>
+                thisRecord
+                    ? thisRecord[0]
+                    : (thisRecord = [await getRecordData()])[0];
 
             if (e?.simpleError) {
                 e.simpleError.ack = true;
@@ -743,8 +748,7 @@ const findObject = async (builder, initConfig) => {
                         }
 
                         readValue().then(
-                            e => { finalize(e); },
-                            e => { finalize(undefined, e); }
+                            e => finalize(...e)
                         );
                     }
                 });

@@ -49,9 +49,11 @@ export const getSystem = (builder) => {
         set: async (table, primary_key, value) => {
             const path = conjoin(table, primary_key);
             await FileSystem.mkdir(path).catch(() => null);
-            await Promise.all(Object.entries(value).map(([k, v]) =>
-                FileSystem.writeFile(joinPath(path, k), serialize(v).toString('base64'), 'base64')
-            ));
+            await Promise.all(
+                Object.entries(value).map(([k, v]) =>
+                    FileSystem.writeFile(joinPath(path, k), serialize(v).toString('base64'), 'base64')
+                )
+            );
         },
         delete: (table, primary_key) => FileSystem.unlink(conjoin(table, primary_key)),
         find: async (table, primary_key, extractions) => {

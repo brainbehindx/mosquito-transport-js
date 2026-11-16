@@ -251,7 +251,7 @@ export const purgeRedundantRecords = async (data, builder, willPurge) => {
     }
 }
 
-export const breakDbMap = (obj = {}, callback) =>
+const breakDbMap = (obj = {}, callback) =>
     Object.entries(obj).forEach(([projectUrl, dbUrlObj]) => {
         Object.entries(dbUrlObj).forEach(([dbUrl, dbNameObj]) => {
             Object.entries(dbNameObj).forEach(([dbName, pathObj]) => {
