@@ -93,11 +93,16 @@ export const mfetch = async (input = '', init, config) => {
 
     const callFetch = () => new Promise(async (resolve, reject) => {
         const retryProcess = ++retries;
+        const isInitial = retryProcess === 1;
 
         const finalize = (a, b, extras) => {
-            if (a) resolve(buildFetchData(a, extras));
-            else reject(basicClone(b));
-            if (hasFinalize || retryProcess !== 1) return;
+            if (isInitial) {
+                if (a) {
+                    resolve(buildFetchData(a, extras));
+                } else reject(basicClone(b));
+            } else resolve([a, b, extras]);
+            
+            if (hasFinalize || !isInitial) return;
             hasFinalize = true;
 
             if (enableMinimizer) {
@@ -117,7 +122,7 @@ export const mfetch = async (input = '', init, config) => {
         };
 
         try {
-            if (retryProcess === 1) {
+            if (isInitial) {
                 if (enableMinimizer) {
                     if (Scoped.PendingFetchCollective[processReqId]) {
                         Scoped.PendingFetchCollective[processReqId].push((a, b) => {
@@ -226,8 +231,7 @@ export const mfetch = async (input = '', init, config) => {
             } else {
                 awaitReachableServer(projectUrl, true).then(() => {
                     callFetch().then(
-                        e => finalize(e),
-                        e => finalize(undefined, e)
+                        e => finalize(...e)
                     );
                 });
             }
