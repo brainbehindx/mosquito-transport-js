@@ -19,19 +19,33 @@ RCT_EXPORT_MODULE()
 
 typedef unsigned char *DIGEST_FUNCTION(const void *data, CC_LONG len, unsigned char *md);
 
-- (NSString*) calcHash: (NSString*) subject withDigestFunction: (DIGEST_FUNCTION) digest withDigestLength: (int) digestLength {
+- (NSString *)calcHash:(NSString *)subject
+    withDigestFunction:(DIGEST_FUNCTION)digest
+     withDigestLength:(int)digestLength {
 
-  const char* str = [subject UTF8String];
-  unsigned char result[digestLength];
-  digest(str, strlen(str), result);
+    const char *str = [subject UTF8String];
+    if (!str) return nil;
 
-  NSMutableString *ret = [NSMutableString stringWithCapacity:digestLength * 2];
-  for(int i = 0; i < digestLength; i++)
-  {
-    [ret appendFormat:@"%02x",result[i]];
-  }
+    size_t strLength = strlen(str);
 
-  return ret;
+    // CC_LONG is unsigned int, so validate before casting.
+    if (strLength > UINT_MAX || digestLength <= 0) {
+        return nil;
+    }
+
+    NSMutableData *result = [NSMutableData dataWithLength:(NSUInteger)digestLength];
+
+    digest(str, (CC_LONG)strLength, (unsigned char *)result.mutableBytes);
+
+    const unsigned char *bytes = (const unsigned char *)result.bytes;
+
+    NSMutableString *ret = [NSMutableString stringWithCapacity:(NSUInteger)digestLength * 2];
+
+    for (int i = 0; i < digestLength; i++) {
+        [ret appendFormat:@"%02x", bytes[i]];
+    }
+
+    return ret;
 }
 
 - (instancetype) init {
@@ -87,7 +101,7 @@ typedef unsigned char *DIGEST_FUNCTION(const void *data, CC_LONG len, unsigned c
   NSString *ret = [self calcHash:data withDigestFunction:CC_SHA256 withDigestLength: CC_SHA256_DIGEST_LENGTH];
 
   if(ret) {
-    resolve(@(ret));
+    resolve(ret);
   } else {
     reject(@"Exception", @"out of memory", nil);
   }
