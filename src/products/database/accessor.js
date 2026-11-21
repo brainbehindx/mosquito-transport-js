@@ -1,7 +1,7 @@
 import { niceHash, shuffleArray, sortArrayByObjectKey } from "../../helpers/peripherals";
 import { awaitStore, updateCacheStore } from "../../helpers/utils";
 import { CacheStore, Scoped } from "../../helpers/variables";
-import { assignExtractionFind, CompareBson, confirmFilterDoc, validateCollectionName, validateFilter } from "./validator";
+import { assignExtractionFind, validateCollectionName } from "./validator";
 import { DatabaseRecordsListener } from "../../helpers/listeners";
 import { niceGuard, Validator } from "guard-object";
 import { TIMESTAMP } from "./types";
@@ -12,6 +12,8 @@ import { FS_PATH, getSystem, useFS } from "../../helpers/fs_manager";
 import { grab, poke, unpoke } from "poke-object";
 import { basicClone } from "../../helpers/basic_clone";
 import { serialize } from "entity-serializer";
+import { compileFilter, isEqualId, testDocument, validateFilter } from "./query";
+import { updateDocument } from "./updater";
 
 const { LIMITER_DATA, LIMITER_RESULT, DB_COUNT_QUERY } = FS_PATH;
 
@@ -300,7 +302,7 @@ const recursiveFlat = (a) => {
     return a.map(v => Array.isArray(v) ? recursiveFlat(v) : v).flat();
 };
 
-const recurseNonAtomicWrite = (obj, i, type) => {
+const validateNonAtomicWrite = (obj, type, i = 0) => {
     if (!Validator.OBJECT(obj)) throw `expected a document but got ${obj}`;
     Object.entries(obj).forEach(([k, v]) => {
         if (!i) {
@@ -311,24 +313,17 @@ const recurseNonAtomicWrite = (obj, i, type) => {
             if (!(k === '$timestamp' && v === 'now'))
                 throw `invalid property "${k}", ${type}() operation fields must not contain .$`;
         }
-        if (Validator.OBJECT(v)) recurseNonAtomicWrite(v, i + 1, type);
+        if (Validator.OBJECT(v)) validateNonAtomicWrite(v, type, i + 1);
     });
 };
 
-const recurseAtomicWrite = (obj, i, type) => {
-    if (!Validator.OBJECT(obj)) throw `expected a document but got ${obj}`;
-    Object.entries(obj).forEach(([k, v]) => {
-        if (!i && !(k in AtomicWriter)) throw `Unknown update operator: ${k}`;
-        if (i === 1) {
-            if ((k === '_id' || k.startsWith('_id.')))
-                throw `avoid providing "_id" for ${type}() operation as _id only reference a single document`;
-
-            if (k === '_foreign_doc' || k.startsWith('_foreign_doc.'))
-                throw '"_foreign_doc" is readonly';
-        }
-        if (k.includes('.$')) throw `unsupported operation at "${k}"`;
-        if (!i || Validator.OBJECT(v)) recurseAtomicWrite(v, i + 1, type);
-    });
+const validateAtomicWrite = (find, modifier, type) => {
+    try {
+        testDocument({}, find);
+        updateDocument({}, modifier);
+    } catch (error) {
+        throw new Error(`invalid atomic write ${type}(), ${error}`);
+    }
 };
 
 const WriteValidator = {
@@ -339,7 +334,7 @@ const WriteValidator = {
         if (_id === undefined || JSON.stringify(_id) === 'null')
             throw `_id requires a valid bson value but got ${_id}`;
 
-        recurseNonAtomicWrite(rest, 0, type);
+        validateNonAtomicWrite(rest, type);
     },
     setMany: ({ value }) => {
         value.forEach(v => {
@@ -348,27 +343,23 @@ const WriteValidator = {
     },
     replaceOne: ({ find, value }) => {
         validateFilter(find);
-        recurseNonAtomicWrite(value, 0, 'replaceOne');
+        validateNonAtomicWrite(value, 'replaceOne');
     },
     putOne: ({ find, value }) => {
         validateFilter(find);
-        recurseNonAtomicWrite(value, 0, 'putOne');
+        validateNonAtomicWrite(value, 'putOne');
     },
     updateOne: ({ find, value }) => {
-        validateFilter(find);
-        recurseAtomicWrite(value, 0, 'updateOne');
+        validateAtomicWrite(find, value, 'updateOne');
     },
     updateMany: ({ find, value }) => {
-        validateFilter(find);
-        recurseAtomicWrite(value, 0, 'updateMany');
+        validateAtomicWrite(find, value, 'updateMany');
     },
     mergeOne: ({ find, value }) => {
-        validateFilter(find);
-        recurseAtomicWrite(value, 0, 'mergeOne');
+        validateAtomicWrite(find, value, 'mergeOne');
     },
     mergeMany: ({ find, value }) => {
-        validateFilter(find);
-        recurseAtomicWrite(value, 0, 'mergeMany');
+        validateAtomicWrite(find, value, 'mergeMany');
     },
     deleteOne: ({ find }) => {
         validateFilter(find);
@@ -465,7 +456,7 @@ export const syncCache = async (builder, result) => {
     const copiedWrite = basicClone(linearWrite);
 
     await Promise.all(linearWrite.map(async ({ value: writeObj, find, type, path }) => {
-        WriteValidator[type]({ find, value: writeObj });
+        validateWriteValue({ type, find, value: writeObj });
         validateCollectionName(path);
         pathChanges.add(path);
 
@@ -515,6 +506,14 @@ export const syncCache = async (builder, result) => {
             const { data: instance_data, command, config } = dataObj;
             const entityFind = command.findOne || command.find;
             const { extraction } = config || {};
+            let thisQuery;
+            let thatQuery;
+
+            const getThisQuery = () =>
+                thisQuery || (thisQuery = (entityFind && compileFilter(entityFind)));
+
+            const getThatQuery = () =>
+                thatQuery || (thatQuery = (find && compileFilter(find)));
 
             const logChanges = (d) => {
                 editions.push(basicClone([entityId, d, path]));
@@ -554,12 +553,16 @@ export const syncCache = async (builder, result) => {
                 const scrapedProjection = await Promise.all((Array.isArray(extractionResultant) ? extractionResultant : [extractionResultant]).map(async (query, i) => {
                     const { sort, direction, limit, find, findOne, collection: path } = query;
                     let scrapDocs = [];
+                    let extractionQuery;
+
+                    const getExtractionQuery = () =>
+                        extractionQuery || (extractionQuery = compileFilter(find || findOne));
 
                     instance_data.forEach(({ _foreign_doc }) => {
                         _foreign_doc = (Array.isArray(_foreign_doc) ? _foreign_doc : [_foreign_doc])[i];
 
                         recursiveFlat([_foreign_doc]).forEach(e => {
-                            if (e && confirmFilterDoc(e, find || findOne)) {
+                            if (e && testDocument(e, getExtractionQuery())) {
                                 scrapDocs.push(e);
                             }
                         });
@@ -567,11 +570,12 @@ export const syncCache = async (builder, result) => {
 
                     if (!scrapDocs.length) {
                         // if no matching extraction was found, proceed to scrapping ancestor path
-                        (await pathGetter(path)).forEach(({ _foreign_doc, ...doc }) => {
-                            if (confirmFilterDoc(doc, find || findOne)) {
-                                scrapDocs.push(doc);
-                            }
-                        });
+                        (await pathGetter(path))
+                            .forEach(({ _foreign_doc, ...doc }) => {
+                                if (testDocument(doc, getExtractionQuery())) {
+                                    scrapDocs.push(doc);
+                                }
+                            });
                     }
                     scrapDocs = scrapDocs.filter((v, i, a) => a.findIndex(b => b._id === v._id) === i);
                     if (sort) sortArrayByObjectKey(scrapDocs, sort);
@@ -590,9 +594,9 @@ export const syncCache = async (builder, result) => {
                     const obj = deserializeNonAtomicWrite(e);
                     if (extraction) obj._foreign_doc = await accessExtraction(obj);
 
-                    if (confirmFilterDoc(obj, entityFind)) {
+                    if (testDocument(obj, getThisQuery())) {
 
-                        if (instance_data.findIndex(v => CompareBson.equal(v._id, e._id)) === -1) {
+                        if (instance_data.findIndex(v => isEqualId(v._id, e._id)) === -1) {
                             const x = snipUpdate(obj);
                             instance_data.push(basicClone(x));
                             logChanges([undefined, x]);
@@ -614,7 +618,7 @@ export const syncCache = async (builder, result) => {
                 for (let i = 0; i < cdata.length; i++) {
                     const doc = cdata[i];
 
-                    if (confirmFilterDoc(doc, find)) {
+                    if (testDocument(doc, getThatQuery())) {
                         const obj = deserializeNonAtomicWrite({
                             ...extras,
                             ...writeObj,
@@ -622,7 +626,7 @@ export const syncCache = async (builder, result) => {
                         });
                         if (extraction) obj._foreign_doc = await accessExtraction(obj);
 
-                        if (confirmFilterDoc(obj, entityFind)) {
+                        if (testDocument(obj, getThisQuery())) {
                             const x = snipUpdate(obj);
                             instance_data[i - deletions] = x;
                             logChanges([doc, x]);
@@ -642,7 +646,7 @@ export const syncCache = async (builder, result) => {
                     });
                     if (extraction) obj._foreign_doc = await accessExtraction(obj);
 
-                    if (confirmFilterDoc(obj, entityFind)) {
+                    if (testDocument(obj, getThisQuery())) {
                         const x = snipUpdate(obj);
                         instance_data.push(x);
                         logChanges([undefined, x]);
@@ -657,7 +661,7 @@ export const syncCache = async (builder, result) => {
 
                 for (let i = 0; i < cdata.length; i++) {
                     const doc = cdata[i];
-                    if (confirmFilterDoc(doc, find)) {
+                    if (testDocument(doc, getThatQuery())) {
                         instance_data.splice(i - deletions++, 1);
                         logChanges([doc, undefined]);
                         if (type === 'deleteOne') return;
@@ -672,12 +676,15 @@ export const syncCache = async (builder, result) => {
 
             for (let i = 0; i < cdata.length; i++) {
                 const doc = cdata[i];
-                if (confirmFilterDoc(doc, find)) {
-                    const obj = deserializeAtomicWrite(doc, deserializeWriteValue(writeObj), false, type);
-                    if (extraction) obj._foreign_doc = await accessExtraction(obj);
+                if (testDocument(doc, getThatQuery())) {
+                    const modifiedDoc = basicClone(doc);
 
-                    if (confirmFilterDoc(obj, entityFind)) {
-                        const x = snipUpdate(obj);
+                    updateDocument(modifiedDoc, deserializeWriteValue(writeObj), false);
+
+                    if (extraction) modifiedDoc._foreign_doc = await accessExtraction(modifiedDoc);
+
+                    if (testDocument(modifiedDoc, getThisQuery())) {
+                        const x = snipUpdate(modifiedDoc);
                         instance_data[i - deletions] = x;
                         logChanges([doc, x]);
                     } else {
@@ -692,18 +699,17 @@ export const syncCache = async (builder, result) => {
 
             if (!founded && type.startsWith('merge')) {
                 const extras = createWriteFromFind(find);
+                const modifiedDoc = { _id: '_id' in extras ? extras._id : currentObjectId() };
+
+                updateDocument(modifiedDoc, deserializeWriteValue(writeObj), true);
+
                 const obj = {
                     ...extras,
-                    ...deserializeAtomicWrite(
-                        { _id: '_id' in extras ? extras._id : currentObjectId() },
-                        deserializeWriteValue(writeObj),
-                        true,
-                        type
-                    )
+                    ...modifiedDoc
                 };
                 if (extraction) obj._foreign_doc = await accessExtraction(obj);
 
-                if (confirmFilterDoc(obj, entityFind)) {
+                if (testDocument(obj, getThisQuery())) {
                     const x = snipUpdate(obj);
                     instance_data.push(x);
                     logChanges([undefined, x]);
@@ -764,11 +770,12 @@ export const revertChanges = async (builder, pendingData) => {
                 const offset = docSize(af) - docSize(b4);
                 colObj.size += offset;
                 incrementDatabaseSize(builder, path, offset);
+                pathChanges.add(path);
             }
 
             if (colList) {
                 if (afDoc) {
-                    const editedIndex = colList.findIndex(e => CompareBson.equal(e._id, afDoc._id));
+                    const editedIndex = colList.findIndex(e => isEqualId(e._id, afDoc._id));
                     if (editedIndex !== -1) {
                         if (
                             serialize(afDoc).toString('base64') === serialize(colList[editedIndex]).toString('base64')
@@ -784,17 +791,16 @@ export const revertChanges = async (builder, pendingData) => {
                     }
                 } else if (
                     b4Doc &&
-                    colList.findIndex(e => CompareBson.equal(e._id, b4Doc._id)) === -1
+                    colList.findIndex(e => isEqualId(e._id, b4Doc._id)) === -1
                 ) {
                     colList.push(b4Doc);
                     updateSize(undefined, b4Doc);
                 }
             }
-            pathChanges.add(path);
         }
     }));
 
-    return [...pendingData];
+    return [...pathChanges];
 }
 
 export const notifyDatabaseNodeChanges = (builder, changedCollections = []) => {
@@ -897,214 +903,3 @@ const deserializeWriteValue = (value) => {
 }
 
 const deserializeNonAtomicWrite = (writeObj) => deserializeWriteValue(writeObj);
-
-const deserializeAtomicWrite = (b4Doc, writeObj, isNew, type) => {
-    const resultantDoc = { ...b4Doc };
-
-    Object.entries(writeObj).forEach(([key, value]) => {
-        if (key in AtomicWriter) {
-            if (Validator.OBJECT(value)) {
-                Object.entries(value).forEach(([k, v]) => {
-                    AtomicWriter[key](k, v, resultantDoc, isNew, type);
-                });
-            } else throw `expected an object at ${key} but got ${value}`;
-        } else if (key.startsWith('$')) {
-            throw `Unknown update operator: ${key}`;
-        } else throw 'MongoInvalidArgumentError: Update document requires atomic operators';
-    });
-
-    return resultantDoc;
-};
-
-const AtomicWriter = {
-    $currentDate: (field, value, object) => {
-        const isDate = value === true || niceGuard({ $type: "date" }, value);
-        const isTimestamp = niceGuard({ $type: "timestamp" }, value);
-
-        if (
-            !isDate &&
-            !isTimestamp
-        ) throw `invalid value at $currentDate.${field}, expected any of boolean (true), { $type: "timestamp" } or { $type: "date" } but got ${value}`;
-        poke(object, field, isDate ? new Date() : { $timestamp: { t: Math.floor(Date.now() / 1000), i: 0 } });
-    },
-    $inc: (field, value, object) => {
-        const current = grab(object, field);
-        if (current === null) {
-            console.warn(`cannot use $inc operator on a null value at ${field}`);
-            return;
-        }
-        const castedCurrent = current;
-        const castedValue = value;
-
-        if (!Validator.NUMBER(castedValue)) throw `expected a number at $inc.${field} but got ${value}`;
-
-        poke(object, field, Validator.NUMBER(castedCurrent) ? castedCurrent + castedValue : value);
-    },
-    $min: (field, value, object) => {
-        const current = grab(object, field);
-        if (CompareBson.lesser(value, current)) {
-            poke(object, field, value);
-        }
-    },
-    $max: (field, value, object) => {
-        const current = grab(object, field);
-        if (CompareBson.greater(value, current)) {
-            poke(object, field, value);
-        }
-    },
-    $mul: (field, value, object) => {
-        const current = grab(object, field);
-        const castedValue = value;
-        const castedCurrent = current;
-
-        if (!Validator.NUMBER(castedValue))
-            throw `expected a number at $mul.${field} but got ${value}`;
-
-        poke(object, field, Validator.NUMBER(castedCurrent) ? castedCurrent * castedValue : 0);
-    },
-    $rename: (field, value, object) => {
-        if (!Validator.EMPTY_STRING(value))
-            throw `expected a non-empty string at $rename.${field} but got ${value}`;
-        const destStage = value.split('.');
-        const sourceStage = field.split('.');
-
-        sourceStage.forEach((e, i, a) => {
-            if (a.length !== destStage.length)
-                throw `dotnotation mismatch for ${value}`;
-            if (i !== a.length - 1) {
-                if (e !== destStage[i])
-                    throw `dotnotation mismatch at ${destStage[i]}, expected "${e}"`;
-            }
-            if (!e) throw `empty node for ${field}`;
-        });
-        const [tipObj, tipSource, tipDest] = destStage.length === 1 ? [object, field, value]
-            : [grab(object, destStage.slice(0, -1).join('.')), sourceStage.slice(-1)[0], destStage.slice(-1)[0]];
-
-        if (tipObj && tipSource in tipObj) {
-            tipObj[tipDest] = basicClone(tipObj[tipSource]);
-            delete tipObj[tipSource];
-        }
-    },
-    $set: (field, value, object) => {
-        poke(object, field, value === undefined ? null : value);
-    },
-    $setOnInsert: (field, value, object, isNew) => {
-        if (isNew) AtomicWriter.$set(field, value, object);
-    },
-    $unset: (field, _, object) => {
-        unpoke(object, field);
-    },
-    $addToSet: (field, value, object) => {
-        const current = grab(object, field);
-        if (Array.isArray(current)) {
-            if (
-                Validator.OBJECT(value) &&
-                Object.keys(value).length === 1 &&
-                '$each' in value
-            ) {
-                const { $each } = value;
-                if (!Array.isArray($each))
-                    throw `expected an array at "$addToSet.${field}.$each" but got ${$each}`;
-                $each.forEach(e => {
-                    if (!current.some(v => CompareBson.equal(v, e))) {
-                        current.push(e);
-                    }
-                });
-            } else if (!current.some(v => CompareBson.equal(v, value))) {
-                current.push(value);
-            }
-        }
-    },
-    $pop: (field, value, object) => {
-        if (![1, -1].includes(value)) throw `expected 1 or -1 at "$pop.${field}" but got ${value}`;
-        const current = grab(object, field);
-        if (
-            Array.isArray(current) &&
-            current.length
-        ) current[value === 1 ? 'pop' : 'shift']();
-    },
-    $pull: (field, value, object) => {
-        // TODO: issues
-        const current = grab(object, field);
-        const isQueryObject = Validator.OBJECT(value);
-
-        if (
-            Array.isArray(current) &&
-            current.length
-        ) {
-            const remainingCurrent = current.filter(v => {
-                const isThisObject = Validator.OBJECT(v);
-
-                try {
-                    if (
-                        confirmFilterDoc(
-                            isThisObject ? v : { __x_: v },
-                            (isThisObject && isQueryObject) ? value : { __x_: value }
-                        )
-                    ) {
-                        return false;
-                    }
-                } catch (_) { }
-                return true;
-            });
-            poke(object, field, remainingCurrent);
-        }
-    },
-    $push: (field, value, object) => {
-        const current = grab(object, field);
-
-        if (Array.isArray(current)) {
-            if (Validator.OBJECT(value)) {
-                const { $each, $sort, $slice, $position, ...rest } = value;
-                if (Object.keys(rest).length)
-                    throw `unknown property "${Object.keys(rest)}" at $push.${field}`;
-
-                if ($position !== undefined) {
-                    if (Validator.INTEGER($position))
-                        throw '$position must have an integer value';
-                    if (!$each) throw '$position operator requires an $each operator';
-                }
-                if ($each !== undefined) {
-                    if (!Array.isArray($each))
-                        throw `expected an array at "$push.${field}.$each" but got ${$each}`;
-                    if ($position !== undefined) {
-                        current.splice($position, 0, ...$each);
-                    } else current.push(...$each);
-                }
-                if ($sort !== undefined) {
-                    if (!$each) throw '$sort operator requires an $each operator';
-                    if ([1, -1].includes($sort)) {
-                        current.sort();
-                        if ($sort === -1) current.reverse();
-                    } else if (Validator.OBJECT($sort)) {
-                        if (Object.keys($sort).length !== 1)
-                            throw 'number of object keys in a $sort must be one';
-
-                        Object.entries($sort).forEach(([k, v]) => {
-                            sortArrayByObjectKey(current, k);
-                            if (v === -1) current.reverse();
-                        });
-                    } else throw `expected either 1, -1 or an object at "$push.${field}.$sort" but got ${$sort}`;
-                }
-                if ($slice) {
-                    if (Validator.POSITIVE_INTEGER($slice))
-                        throw `$slice operator requires a positive integer but got ${$slice}`;
-                    current.splice($slice);
-                }
-            } else current.push(value);
-        }
-    },
-    $pullAll: (field, value, object) => {
-        if (!Array.isArray(value))
-            throw `expected an array at $pullAll.${field}`;
-
-        const current = grab(object, field);
-
-        if (Array.isArray(current)) {
-            const remainingCurrent = current.filter(v =>
-                !value.some(k => CompareBson.equal(v, k))
-            );
-            poke(object, field, remainingCurrent);
-        }
-    }
-};

@@ -1,7 +1,7 @@
 import { deserializeE2E, parseToken, serializeE2E, isBrowserContext, isScreenFocused, listenScreenVisible } from "./helpers/peripherals";
 import { awaitReachableServer, awaitStore, checkAreYouOk, listenReachableServer, releaseCacheStore } from "./helpers/utils";
 import { CacheStore, PACKAGES, Scoped } from "./helpers/variables";
-import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database";
+import { MTCollection, batchWrite, onCollectionConnect, trySendPendingWrite } from "./products/database/index.js";
 import { MTStorage } from "./products/storage";
 import { ServerReachableListener } from "./helpers/listeners";
 import { awaitRefreshToken, initTokenRefresher, listenToken, listenTokenReady, triggerAuthToken } from "./products/auth/accessor";
@@ -179,8 +179,8 @@ export class MosquitoTransport {
             collection: (path) => new MTCollection({
                 ...this.config,
                 path,
-                dbName: dbName || '',
-                dbUrl: dbUrl || ''
+                dbName,
+                dbUrl
             })
         };
     }
@@ -564,11 +564,11 @@ const validateReleaseCacheProp = (prop) => {
 
 const ConfigValidator = {
     dbName: (v) => {
-        if (typeof v !== 'string' || !v.trim())
+        if (v !== undefined && (typeof v !== 'string' || !v.trim()))
             throw `Invalid value supplied to dbName, value must be a non-empty string`;
     },
     dbUrl: (v) => {
-        if (typeof v !== 'string' || !v.trim())
+        if (v !== undefined && (typeof v !== 'string' || !v.trim()))
             throw `Invalid value supplied to dbUrl, value must be a non-empty string`;
     },
     projectUrl: (v) => {
